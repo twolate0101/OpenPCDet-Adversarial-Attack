@@ -2,14 +2,14 @@ import argparse
 import glob
 from pathlib import Path
 
-try:
-    import open3d
-    from visual_utils import open3d_vis_utils as V
-    OPEN3D_FLAG = True
-except:
-    import mayavi.mlab as mlab
-    from visual_utils import visualize_utils as V
-    OPEN3D_FLAG = False
+#try:
+#    import open3d
+#    from visual_utils import open3d_vis_utils as V
+#    OPEN3D_FLAG = True
+#except:
+#    import mayavi.mlab as mlab
+#    from visual_utils import visualize_utils as V
+#   OPEN3D_FLAG = False
 
 import numpy as np
 import torch
@@ -97,13 +97,17 @@ def main():
             load_data_to_gpu(data_dict)
             pred_dicts, _ = model.forward(data_dict)
 
-            V.draw_scenes(
-                points=data_dict['points'][:, 1:], ref_boxes=pred_dicts[0]['pred_boxes'],
-                ref_scores=pred_dicts[0]['pred_scores'], ref_labels=pred_dicts[0]['pred_labels']
-            )
+            # V.draw_scenes(
+            #     points=data_dict['points'][:, 1:], ref_boxes=pred_dicts[0]['pred_boxes'],
+            #    ref_scores=pred_dicts[0]['pred_scores'], ref_labels=pred_dicts[0]['pred_labels']
+            # )
 
-            if not OPEN3D_FLAG:
-                mlab.show(stop=True)
+            # if not OPEN3D_FLAG:
+            #     mlab.show(stop=True)
+            print(f"\n✅ 检测成功！总共找到 {len(pred_dicts[0]['pred_labels'])} 个目标。")
+            print(f"坐标框 (x, y, z, dx, dy, dz, heading):\n {pred_dicts[0]['pred_boxes']}")
+            print(f"置信度得分:\n {pred_dicts[0]['pred_scores']}")
+            print(f"类别标签 (1=Car, 2=Pedestrian, 3=Cyclist):\n {pred_dicts[0]['pred_labels']}\n")
 
     logger.info('Demo done.')
 
