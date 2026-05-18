@@ -109,6 +109,52 @@ def main():
             print(f"置信度得分:\n {pred_dicts[0]['pred_scores']}")
             print(f"类别标签 (1=Car, 2=Pedestrian, 3=Cyclist):\n {pred_dicts[0]['pred_labels']}\n")
 
+            # === 在这里插入可视化的代码 ===
+            import matplotlib.pyplot as plt
+            import numpy as np
+            import os
+
+            # 1. 把张量从 GPU 拿回到 CPU，并转成 Numpy 数组
+            points = data_dict['points'][:, 1:].cpu().numpy()
+            boxes = pred_dicts[0]['pred_boxes'].cpu().numpy()
+            labels = pred_dicts[0]['pred_labels'].cpu().numpy()
+
+            # 2. 创建画布（纯黑背景，更有自动驾驶的科技感）
+            fig, ax = plt.subplots(figsize=(12, 12))
+            fig.patch.set_facecolor('black')
+            ax.set_facecolor('black')
+
+            # 3. 画点云（根据高度 z 赋予渐变色，每隔5个点画一个提速）
+            ax.scatter(points[::5, 0], points[::5, 1], s=0.1, c=points[::5, 2], cmap='viridis', alpha=0.8)
+
+            # 4. 画边界框（投影到 2D 鸟瞰图）
+            for idx, box in enumerate(boxes):
+                x, y, z, dx, dy, dz, heading = box
+                # 计算 2D 旋转矩阵
+                cos_a, sin_a = np.cos(heading), np.sin(heading)
+                # 矩形的四个角点
+                corners = np.array([[-dx/2, -dy/2], [dx/2, -dy/2], [dx/2, dy/2], [-dx/2, dy/2], [-dx/2, -dy/2]])
+                # 旋转并平移到真实坐标
+                rot_corners = np.zeros_like(corners)
+                rot_corners[:, 0] = corners[:, 0] * cos_a - corners[:, 1] * sin_a + x
+                rot_corners[:, 1] = corners[:, 0] * sin_a + corners[:, 1] * cos_a + y
+
+                # 根据类别上色 (1=Car:红, 2=Pedestrian:绿, 3=Cyclist:青)
+                color = 'r' if labels[idx] == 1 else ('g' if labels[idx] == 2 else 'c')
+                ax.plot(rot_corners[:, 0], rot_corners[:, 1], c=color, linewidth=2)
+
+            # 5. 设置视角 (雷达坐标系：x向正前方，y向左侧)
+            ax.set_xlim(0, 70)   # 重点看前方 70 米
+            ax.set_ylim(-40, 40) # 左右各 40 米
+            ax.set_aspect('equal')
+            ax.axis('off')       # 隐藏坐标轴
+
+            # 6. 保存高清图片
+            save_path = 'result_bev.png'
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
+            print(f"📸 鸟瞰图已成功渲染并保存至: {os.path.abspath(save_path)}")
+            # ==============================
+
     logger.info('Demo done.')
 
 
