@@ -82,7 +82,9 @@ class KittiDataset(DatasetTemplate):
 
     def get_image_shape(self, idx):
         img_file = self.root_split_path / 'image_2' / ('%s.png' % idx)
-        assert img_file.exists()
+        # 如果找不到图片，直接返回 KITTI 默认的假图片分辨率 (高375, 宽1242)，防止程序崩溃
+        if not img_file.exists():
+            return np.array([375, 1242], dtype=np.int32)
         return np.array(io.imread(img_file).shape[:2], dtype=np.int32)
 
     def get_label(self, idx):
