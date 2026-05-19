@@ -15,3 +15,5 @@ venv/
 *.bin
 output
 version.py
+data/kitti/
+data/kitti/ImageSets/test.txt
