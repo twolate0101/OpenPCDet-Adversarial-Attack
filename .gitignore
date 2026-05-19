@@ -17,3 +17,6 @@ output
 version.py
 data/kitti/
 data/kitti/ImageSets/test.txt
+data/kitti/ImageSets/val.txt
+data/kitti/ImageSets/train.txt
+data/kitti/ImageSets/test.txt
