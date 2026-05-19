@@ -41,6 +41,9 @@ def parse_config():
     parser.add_argument('--save_to_file', action='store_true', default=False, help='')
     parser.add_argument('--infer_time', action='store_true', default=False, help='calculate inference latency')
 
+    parser.add_argument('--attack', type=str, default='none', help='Attack type: none, drop, noise, etc.')
+    parser.add_argument('--severity', type=float, default=1.0, help='Attack severity')
+
     args = parser.parse_args()
 
     cfg_from_yaml_file(args.cfg_file, cfg)
@@ -173,6 +176,9 @@ def main():
 
     if args.eval_tag is not None:
         eval_output_dir = eval_output_dir / args.eval_tag
+    # === 为了区分不同攻击的结果，把攻击类型写入目录名 ===
+    if args.attack != 'none':
+        eval_output_dir = eval_output_dir / f"{args.attack}_sev{args.severity}"
 
     eval_output_dir.mkdir(parents=True, exist_ok=True)
     log_file = eval_output_dir / ('log_eval_%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
@@ -199,6 +205,26 @@ def main():
     )
 
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=test_set)
+    # === PyTorch Hook 机制拦截 ===
+    # 当底层代码调用 model(batch_dict) 时，会先自动执行下面这个 attack_hook
+    sys.path.append('..')
+    try:
+        from attackers import get_attacker
+        attacker = get_attacker(args.attack, args.severity)
+        if attacker is not None:
+            logger.info(f"🚨 注入网络前向传播 Hook: {args.attack}, 强度: {args.severity}")
+            
+            def attack_hook(module, args_tuple):
+                # args_tuple 包含了传入 forward 函数的参数，这里是 (batch_dict,)
+                batch_dict = args_tuple[0]
+                batch_dict = attacker.forward(batch_dict)
+                return (batch_dict,)
+            
+            # 将钩子注册到模型上
+            model.register_forward_pre_hook(attack_hook)
+    except ImportError:
+        logger.warning("未找到 attackers 模块，不进行攻击。")
+        
     with torch.no_grad():
         if args.eval_all:
             repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir, dist_test=dist_test)

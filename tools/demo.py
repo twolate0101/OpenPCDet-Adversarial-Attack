@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import sys
 
 from pcdet.config import cfg, cfg_from_yaml_file
 from pcdet.datasets import DatasetTemplate
@@ -68,7 +69,8 @@ def parse_config():
                         help='specify the point cloud data file or directory')
     parser.add_argument('--ckpt', type=str, default=None, help='specify the pretrained model')
     parser.add_argument('--ext', type=str, default='.bin', help='specify the extension of your point cloud data file')
-
+    parser.add_argument('--attack', type=str, default='none', help='none,noise,drop 等')
+    parser.add_argument('--severity', type=float, default=1.0, help='攻击强度')
     args = parser.parse_args()
 
     cfg_from_yaml_file(args.cfg_file, cfg)
@@ -80,11 +82,50 @@ def main():
     args, cfg = parse_config()
     logger = common_utils.create_logger()
     logger.info('-----------------Quick Demo of OpenPCDet-------------------------')
+
+    # === 动态加载攻击器 ===
+    sys.path.append('..')
+    try:
+        from attackers import get_attacker
+        attacker = get_attacker(args.attack,args.severity)
+        if attacker is not None:
+            logger.info(f"✅ 已启用攻击模式: {args.attack}，强度: {args.severity}")
+    except ImportError:
+        attacker = None
+        logger.warning("⚠️ 未找到attacker模块,将以正常模式运行.")
+
+
     demo_dataset = DemoDataset(
         dataset_cfg=cfg.DATA_CONFIG, class_names=cfg.CLASS_NAMES, training=False,
         root_path=Path(args.data_path), ext=args.ext, logger=logger
     )
     logger.info(f'Total number of samples: \t{len(demo_dataset)}')
+    # === 【终极拦截点前移：动态劫持体素化流程】 ===
+    if attacker is not None:
+        import types
+        original_prepare_data = demo_dataset.prepare_data
+        
+        def hooked_prepare_data(self, data_dict):
+            """
+            在数据被切分成体素前，强行拉到显存进行攻击，然后再放回内存进行体素化。
+            """
+            # 1. 此时 input_dict 里只有最原始的 numpy 点云
+            pt_tensor = torch.from_numpy(data_dict['points']).cuda()
+            
+            # 2. 包装成你的 Attacker 认识的格式
+            tmp_dict = {'points': pt_tensor}
+            tmp_dict = attacker.forward(tmp_dict)
+            
+            # 3. 攻击完成后，将带毒的点云转回 CPU numpy，覆盖回去
+            data_dict['points'] = tmp_dict['points'].cpu().numpy()
+            
+            # 4. 把带毒的数据扔给 OpenPCDet 原生的体素化算子
+            return original_prepare_data(data_dict=data_dict)
+        
+        # 将劫持后的函数强制绑定给 demo_dataset
+        demo_dataset.prepare_data = types.MethodType(hooked_prepare_data, demo_dataset)
+    # ===============================================
+
 
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=demo_dataset)
     model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=True)
