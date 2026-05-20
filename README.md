@@ -20,6 +20,7 @@ It is also the official code release of [`[PointRCNN]`](https://arxiv.org/abs/18
 - [Quick Demo](docs/DEMO.md)
 - [Getting Started](docs/GETTING_STARTED.md)
 - [Citation](#citation)
+- [协作建议](docs/cowork.md)
 
 
 ## Changelog
