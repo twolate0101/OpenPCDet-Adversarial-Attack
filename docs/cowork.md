@@ -13,6 +13,7 @@ cd OpenPCDet
 python setup.py develop
 ```
 ## 一些环境准备
+* 访问 https://www.danielgm.net/cc/release/?spm=a2ty_o01.29997173.0.0.1d6455fbUM6296 在你的电脑上安装 cloudcompare 软件（这是一个开源的点云处理软件，后续我们会用它来可视化攻击前后的 `.plt` 点云数据）。
 ```bash
 # 1. 把老镜像的模型的ckpts(模型权重 .pth)复制到新文件夹
 mkdir -p ~/OpenPCDet/ckpts
@@ -37,6 +38,9 @@ ln -s /root/autodl-tmp/kitti/testing .
 cd ~/OpenPCDet
 python -m pcdet.datasets.kitti.kitti_dataset create_kitti_infos tools/cfgs/dataset_configs/kitti_dataset.yaml
 
+# 5. 安装plotly 以导出plt文件
+pip install plotly
+
 ```
 ## 测试demo.py
 ```bash
@@ -52,6 +56,13 @@ python demo.py --cfg_file cfgs/kitti_models/pointpillar.yaml --ckpt ../ckpts/poi
 # 3.测试微扰攻击 (应检测到更少(如48,24)的目标,图片有明显的噪点且检测框减少)
 python demo.py --cfg_file cfgs/kitti_models/pointpillar.yaml --ckpt ../ckpts/pointpillar_7728.pth --data_path ../data/kitti/testing/velodyne/000008.bin --attack noise --severity 0.5
 ```
+
+## 可视化产出
+* BEV图：在运行 demo.py 后，输出目录下会生成 `result_bev.png`，这是攻击后的鸟瞰图（BEV）结果。你可以对比攻击前后的 `result_bev.png`，通常你会看到攻击后检测框数量明显减少，或者位置发生偏移，这些都是攻击成功的迹象。
+* 点云数据：在输出目录下会生成 `attacked_points.plt`，这是攻击后的点云数据文件。你可以将其下载到本地,使用 CloudCompare 软件打开这个 `.plt` 文件，查看攻击前后的点云变化。通常你会看到攻击后点云的密度降低或者位置发生偏移，这些变化会导致检测性能下降。
+    * 选中`.ptl`文件后,你可以在左下角的属性中改变`point size`来更清晰地看到点云的变化。
+    * 右侧边栏的GL滤波器中提供了 EDL 选项,启用他可以增强点云的边缘特征,有助于更清晰地看到攻击前后点云的结构变化。
+* HTML报告：在本地浏览器打开以直观查看检测结果
 
 # 协作建议
 
