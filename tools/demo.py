@@ -2,6 +2,7 @@ import argparse
 import glob
 from pathlib import Path
 
+
 #try:
 #    import open3d
 #    from visual_utils import open3d_vis_utils as V
@@ -19,6 +20,10 @@ from pcdet.config import cfg, cfg_from_yaml_file
 from pcdet.datasets import DatasetTemplate
 from pcdet.models import build_network, load_data_to_gpu
 from pcdet.utils import common_utils
+
+from visual_utils.bev_visualizer import BEVVisualizer
+from visual_utils.plotly_visualizer import PlotlyVisualizer
+from visual_utils.ply_exporter import PLYExporter
 
 
 class DemoDataset(DatasetTemplate):
@@ -109,6 +114,10 @@ def main():
             """
             在数据被切分成体素前，强行拉到显存进行攻击，然后再放回内存进行体素化。
             """
+            # 在数据被下毒前，深拷贝一份干净点云
+            # 这是后续 Plotly 计算“扰动热力图 (Delta)”的绝对前提
+            self.last_clean_points = data_dict['points'].copy()
+
             # 1. 此时 input_dict 里只有最原始的 numpy 点云
             pt_tensor = torch.from_numpy(data_dict['points']).cuda()
             
@@ -131,6 +140,12 @@ def main():
     model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=True)
     model.cuda()
     model.eval()
+
+    # 创建统一的可视化输出目录，
+    out_dir = Path('output/viz_results')
+    out_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"📂 可视化结果将统一保存至: {out_dir.absolute()}")
+
     with torch.no_grad():
         for idx, data_dict in enumerate(demo_dataset):
             logger.info(f'Visualized sample index: \t{idx + 1}')
@@ -150,51 +165,49 @@ def main():
             print(f"置信度得分:\n {pred_dicts[0]['pred_scores']}")
             print(f"类别标签 (1=Car, 2=Pedestrian, 3=Cyclist):\n {pred_dicts[0]['pred_labels']}\n")
 
-            # === 在这里插入可视化的代码 ===
-            import matplotlib.pyplot as plt
-            import numpy as np
-            import os
+                       # ==========================================
+            # 🌟 多维可视化链路 
+            # ==========================================
+            
+            # 1. 提取数据 (注意切片 1:4 避开 batch_idx)
+            adv_points_xyz = data_dict['points'][:, 1:4].cpu().numpy()
+            adv_points_full = data_dict['points'][:, 1:].cpu().numpy() 
+            pred_boxes = pred_dicts[0]['pred_boxes'].cpu().numpy()
+            pred_labels = pred_dicts[0]['pred_labels'].cpu().numpy() # 🌟 新增：提取标签
+            
+            # 获取干净点云 (用于 Plotly 算扰动)
+            clean_points_raw = getattr(demo_dataset, 'last_clean_points', None)
+            clean_points_xyz = clean_points_raw[:, :3] if clean_points_raw is not None else adv_points_xyz
 
-            # 1. 把张量从 GPU 拿回到 CPU，并转成 Numpy 数组
-            points = data_dict['points'][:, 1:].cpu().numpy()
-            boxes = pred_dicts[0]['pred_boxes'].cpu().numpy()
-            labels = pred_dicts[0]['pred_labels'].cpu().numpy()
+            # 2. 调用三大可视化模块
+            # [A] BEV 鸟瞰图 (传入 labels 让框变色)
+            bev_path = out_dir / f"{idx:04d}_attacked_bev.png"
+            BEVVisualizer.draw(
+                adv_points_xyz, 
+                pred_boxes, 
+                bev_path, 
+                title=f"BEV (Idx: {idx})", 
+                labels=pred_labels  # 🌟 新增参数
+            )
+            
+            # [B] Plotly 3D 交互热力图
+            plotly_path = out_dir / f"{idx:04d}_3d_heatmap.html"
+            pred_labels = pred_dicts[0]['pred_labels'].cpu().numpy() # 提取标签
+            PlotlyVisualizer.export_attack_analysis(
+                pts_clean=clean_points_xyz, 
+                pts_adv=adv_points_xyz, 
+                boxes=pred_boxes, 
+                labels=pred_labels, 
+                save_path=plotly_path,
+                title=f"Attack Analysis (Idx: {idx})"
+            )
+            
+            # [C] PLY 导出
+            ply_path = out_dir / f"{idx:04d}_adv_cloud.ply"
+            PLYExporter.export(adv_points_full, ply_path)
+            
+            logger.info(f"🎨 多维可视化完成，文件已保存至 {out_dir}")
 
-            # 2. 创建画布（纯黑背景，更有自动驾驶的科技感）
-            fig, ax = plt.subplots(figsize=(12, 12))
-            fig.patch.set_facecolor('black')
-            ax.set_facecolor('black')
-
-            # 3. 画点云（根据高度 z 赋予渐变色，每隔5个点画一个提速）
-            ax.scatter(points[::5, 0], points[::5, 1], s=0.1, c=points[::5, 2], cmap='viridis', alpha=0.8)
-
-            # 4. 画边界框（投影到 2D 鸟瞰图）
-            for idx, box in enumerate(boxes):
-                x, y, z, dx, dy, dz, heading = box
-                # 计算 2D 旋转矩阵
-                cos_a, sin_a = np.cos(heading), np.sin(heading)
-                # 矩形的四个角点
-                corners = np.array([[-dx/2, -dy/2], [dx/2, -dy/2], [dx/2, dy/2], [-dx/2, dy/2], [-dx/2, -dy/2]])
-                # 旋转并平移到真实坐标
-                rot_corners = np.zeros_like(corners)
-                rot_corners[:, 0] = corners[:, 0] * cos_a - corners[:, 1] * sin_a + x
-                rot_corners[:, 1] = corners[:, 0] * sin_a + corners[:, 1] * cos_a + y
-
-                # 根据类别上色 (1=Car:红, 2=Pedestrian:绿, 3=Cyclist:青)
-                color = 'r' if labels[idx] == 1 else ('g' if labels[idx] == 2 else 'c')
-                ax.plot(rot_corners[:, 0], rot_corners[:, 1], c=color, linewidth=2)
-
-            # 5. 设置视角 (雷达坐标系：x向正前方，y向左侧)
-            ax.set_xlim(0, 70)   # 重点看前方 70 米
-            ax.set_ylim(-40, 40) # 左右各 40 米
-            ax.set_aspect('equal')
-            ax.axis('off')       # 隐藏坐标轴
-
-            # 6. 保存高清图片
-            save_path = 'result_bev.png'
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
-            print(f"📸 鸟瞰图已成功渲染并保存至: {os.path.abspath(save_path)}")
-            # ==============================
 
     logger.info('Demo done.')
 
