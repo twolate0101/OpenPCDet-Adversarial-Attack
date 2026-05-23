@@ -40,6 +40,10 @@ from pcdet.datasets import DatasetTemplate
 from pcdet.models import build_network, load_data_to_gpu
 from pcdet.utils import common_utils
 
+from visual_utils.bev_visualizer import BEVVisualizer
+from visual_utils.plotly_visualizer import PlotlyVisualizer
+from visual_utils.ply_exporter import PLYExporter
+
 CLS_NAMES = {1: 'Car', 2: 'Pedestrian', 3: 'Cyclist'}
 BLACKBOX_ATTACKS = ['noise', 'drop', 'spawn', 'scatter', 'object']
 WHITEBOX_ATTACKS = ['pgd', 'perturb']
@@ -86,6 +90,8 @@ def parse_config():
                         help='Skip gradient-based attacks (faster)')
     parser.add_argument('--iterations', type=int, default=20,
                         help='Iterations for white-box attacks')
+    parser.add_argument('--viz_frames', type=int, default=1,
+                        help='Number of frames to generate per-attack BEV/Plotly/PLY visualizations')
     args = parser.parse_args()
     args.severities = [float(s) for s in args.severities.split(',')]
     cfg_from_yaml_file(args.cfg_file, cfg)
@@ -117,7 +123,9 @@ def compute_pred_stats(pred, cls_names):
 
 
 def run_blackbox_attack(attacker, raw_points, demo_dataset):
-    """黑盒攻击: 在原始点云上攻击, 然后走 prepare_data → collate → gpu 完整管线."""
+    """黑盒攻击: 在原始点云上攻击, 然后走 prepare_data → collate → gpu 完整管线.
+    Returns: (data_dict_gpu, attacked_points_numpy)
+    """
     pts_tensor = torch.from_numpy(raw_points).cuda()
     tmp = {'points': pts_tensor}
     tmp = attacker.forward(tmp)
@@ -127,7 +135,7 @@ def run_blackbox_attack(attacker, raw_points, demo_dataset):
     data_dict = demo_dataset.prepare_data(data_dict=input_dict)
     data_dict_gpu = demo_dataset.collate_batch([data_dict])
     load_data_to_gpu(data_dict_gpu)
-    return data_dict_gpu
+    return data_dict_gpu, attacked_points
 
 
 def main():
@@ -189,9 +197,27 @@ def main():
         clean_stats = compute_pred_stats(pred_clean, CLS_NAMES)
         clean_stats_list.append(clean_stats)
 
+        # ── 单帧可视化：干净帧 BEV + PLY ──
+        do_viz = frame_idx < args.viz_frames
+        if do_viz:
+            viz_frame_dir = Path('result') / 'frames' / frame_id
+            viz_frame_dir.mkdir(parents=True, exist_ok=True)
+
+            clean_boxes = pred_clean['pred_boxes'].cpu().numpy()
+            clean_labels = pred_clean['pred_labels'].cpu().numpy()
+
+            BEVVisualizer.draw(
+                raw_pts, clean_boxes,
+                save_path=str(viz_frame_dir / 'clean_bev.png'),
+                title=f'{frame_id} — Clean ({clean_stats["count"]} detections)',
+                labels=clean_labels)
+            PLYExporter.export(raw_pts, str(viz_frame_dir / 'clean_cloud.ply'))
+            logger.info(f'  [viz] Clean BEV + PLY saved to {viz_frame_dir}')
+
         for atk_type in attack_types:
             for sev in args.severities:
                 t0 = time.time()
+                attacked_pts_np = None  # adversarial raw points (only for black-box)
 
                 if atk_type in WHITEBOX_ATTACKS:
                     # 白盒攻击: 在 collated GPU tensors 上操作
@@ -215,7 +241,7 @@ def main():
                 else:
                     # 黑盒攻击: 在原始点云上攻击, 走完整 prepare_data 管线
                     attacker = get_attacker(atk_type, severity=sev)
-                    d_gpu = run_blackbox_attack(attacker, raw_pts.copy(), demo_dataset)
+                    d_gpu, attacked_pts_np = run_blackbox_attack(attacker, raw_pts.copy(), demo_dataset)
                     with torch.no_grad():
                         preds, _ = model.forward(d_gpu)
                     pred_adv = preds[0]
@@ -225,6 +251,38 @@ def main():
 
                 adv_stats = compute_pred_stats(pred_adv, CLS_NAMES)
                 asr = (clean_stats['count'] - adv_stats['count']) / max(clean_stats['count'], 1) * 100
+
+                # ── 单帧可视化：攻击后 BEV + Plotly + PLY (仅黑盒有完整点云) ──
+                if do_viz:
+                    atk_viz_dir = viz_frame_dir / atk_type / f'sev_{sev:.1f}'
+                    atk_viz_dir.mkdir(parents=True, exist_ok=True)
+
+                    adv_boxes = pred_adv['pred_boxes'].cpu().numpy()
+                    adv_labels = pred_adv['pred_labels'].cpu().numpy()
+                    pts_for_bev = attacked_pts_np if attacked_pts_np is not None else raw_pts
+
+                    # BEV (攻击后)
+                    BEVVisualizer.draw(
+                        pts_for_bev, adv_boxes,
+                        save_path=str(atk_viz_dir / 'adv_bev.png'),
+                        title=f'{frame_id} [{atk_type}] sev={sev:.1f} — ASR={asr:.1f}%',
+                        labels=adv_labels)
+
+                    # PLY (攻击后点云)
+                    PLYExporter.export(pts_for_bev, str(atk_viz_dir / 'adv_cloud.ply'))
+
+                    # Plotly 3D 交互热力图 (仅黑盒有干净/攻击点云对)
+                    # 注意: 插入类攻击(生成新点)会使 adv > clean, 需对齐尺寸
+                    if attacked_pts_np is not None:
+                        n_common = min(len(raw_pts), len(attacked_pts_np))
+                        plot_sample = min(n_common, 30000)
+                        idx_c = np.random.choice(len(raw_pts), min(plot_sample, len(raw_pts)), replace=False)
+                        idx_a = np.random.choice(len(attacked_pts_np), min(plot_sample, len(attacked_pts_np)), replace=False)
+                        PlotlyVisualizer.export_attack_analysis(
+                            pts_clean=raw_pts[idx_c], pts_adv=attacked_pts_np[idx_a],
+                            boxes=adv_boxes, labels=adv_labels,
+                            save_path=str(atk_viz_dir / '3d_heatmap.html'),
+                            title=f'{frame_id} [{atk_type}] sev={sev:.1f} (ASR={asr:.1f}%)')
 
                 result = dict(
                     frame=frame_id, severity=sev, asr=asr,
