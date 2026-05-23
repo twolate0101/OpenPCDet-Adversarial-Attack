@@ -1,14 +1,14 @@
 """
-对抗扰动度量工具 (论文 Section 3.4, metrics.py)
+对抗扰动度量工具（CVPR 2019 论文 Section 4-6 评估体系）。
 
 实现三维点云对抗攻击的量化评估体系，包含三类度量:
-  1. 扰动幅度 (L2, Chamfer, Hausdorff, outlier ratio)
-  2. 攻击有效性 (ASR, 置信度下降, 各类别检出变化)
-  3. 感知质量 (分布偏移, 异常点比例)
+  1. 扰动幅度度量（论文 Section 4  L2 范数 + Section 5.1.1 Chamfer/Hausdorff）
+  2. 攻击有效性（ASR、置信度下降、各类别检出变化）
+  3. 感知质量（分布偏移、异常点比例）
 
-可用于 Perturbation 攻击 (有原始/扰动对应点对) 和 Generation 攻击 (新注入点)。
+可用于 Perturbation 攻击（有原始/扰动对应点对）和 Generation 攻击（新注入点）。
 
-参考: Xiang, Qi, Li - "Generating 3D Adversarial Point Clouds" (CVPR 2019, Sec 3.4)
+参考: Xiang, Qi, Li — "Generating 3D Adversarial Point Clouds" (CVPR 2019, Section 4-6)
 """
 
 import torch
@@ -31,7 +31,7 @@ class PerturbationMetrics:
     @staticmethod
     def l2_per_point(original_xyz, perturbed_xyz, valid_mask=None):
         """
-        逐点 L2 距离 (论文 Eq.4)。
+        逐点 L2 距离（论文 Section 4 Eq.3 Lp 范数）。
         Args:
             original_xyz: (N, 3) 或 (M, max_pts, 3)
             perturbed_xyz: 同上
@@ -72,7 +72,7 @@ class PerturbationMetrics:
     @staticmethod
     def outlier_ratio(original_xyz, perturbed_xyz, threshold=0.3, valid_mask=None):
         """
-        大幅扰动点比例 (论文 Sec 3.4, outlier ratio)。
+        大幅扰动点比例（论文 Section 5.1.1 Count 度量 Eq.6 的变体）。
         统计位移超过 threshold (m) 的点占比。
         """
         dist = PerturbationMetrics.l2_per_point(original_xyz, perturbed_xyz, valid_mask)
@@ -89,7 +89,7 @@ class PerturbationMetrics:
     @staticmethod
     def chamfer_distance(pc1, pc2, n_samples=5000):
         """
-        Chamfer distance (论文 Sec 3.4 Eq.5)。
+        Chamfer 距离（论文 Section 5.1.1 Eq.5）。
         CD(A,B) = mean_a min_b ||a-b||^2 + mean_b min_a ||b-a||^2
 
         对 10万+ 点云自动下采样以控制计算量。
@@ -112,7 +112,7 @@ class PerturbationMetrics:
     @staticmethod
     def hausdorff_distance(pc1, pc2, n_samples=5000):
         """
-        Hausdorff distance (论文 Sec 3.4 Eq.6)。
+        Hausdorff 距离（论文 Section 5.1.1 Eq.4）。
         H(A,B) = max{ max_a min_b ||a-b||, max_b min_a ||b-a|| }
         """
         if pc1.shape[0] > n_samples:
@@ -134,7 +134,7 @@ class PerturbationMetrics:
     @staticmethod
     def attack_success_rate(clean_preds, adv_preds, mode='count'):
         """
-        攻击成功率 (论文 Sec 3.4, ASR)。
+        攻击成功率（论文 Section 6 实验评估指标）。
 
         Args:
             clean_preds: dict with 'pred_scores', 'pred_labels', 'pred_boxes'
@@ -208,7 +208,7 @@ class PerturbationMetrics:
 
     @staticmethod
     def compute_perturbation(original_xyz, perturbed_xyz, valid_mask=None):
-        """针对 Perturbation 攻击的全套度量 (论文 Sec 3.2 评估)"""
+        """针对 Perturbation 攻击的全套度量（论文 Section 4-5 评估体系）"""
         return dict(
             l2=PerturbationMetrics.l2_summary(original_xyz, perturbed_xyz, valid_mask),
             outlier_ratio_30cm=PerturbationMetrics.outlier_ratio(
@@ -221,7 +221,7 @@ class PerturbationMetrics:
 
     @staticmethod
     def compute_effectiveness(clean_preds, adv_preds, class_names=None):
-        """针对任意攻击的有效性度量 (论文 Sec 3.4 评估)"""
+        """针对任意攻击的有效性度量（论文 Section 6 实验评估）"""
         return dict(
             asr_count=PerturbationMetrics.attack_success_rate(clean_preds, adv_preds, 'count'),
             asr_score=PerturbationMetrics.attack_success_rate(clean_preds, adv_preds, 'score'),
@@ -244,15 +244,15 @@ class PerturbationMetrics:
 
     @staticmethod
     def pretty_print(metrics):
-        """格式化打印度量报告 (类似论文 Table 1)"""
+        """格式化打印度量报告"""
         print(f"\n{'='*64}")
-        print(f"  Perturbation Measurement Report (Sec 3.4)")
+        print(f"  Perturbation Measurement Report")
         print(f"{'='*64}")
 
         if 'perturbation' in metrics:
             p = metrics['perturbation']
             l2 = p['l2']
-            print(f"\n  ── Perturbation Magnitude ──")
+            print(f"\n  ── 扰动幅度 (论文 Section 4-5) ──")
             print(f"  L2 mean/median/max:  {l2['mean']:.4f} / {l2['median']:.4f} / {l2['max']:.4f} m")
             print(f"  L2 std/p90/p95/p99:  {l2['std']:.4f} / {l2['p90']:.4f} / {l2['p95']:.4f} / {l2['p99']:.4f} m")
             print(f"  Outlier ratio (>0.3m): {p['outlier_ratio_30cm']:.2%}")
@@ -261,7 +261,7 @@ class PerturbationMetrics:
 
         if 'effectiveness' in metrics:
             e = metrics['effectiveness']
-            print(f"\n  ── Attack Effectiveness ──")
+            print(f"\n  ── 攻击有效性 (论文 Section 6) ──")
             print(f"  ASR (count):  {e['asr_count']:.1f}%")
             print(f"  ASR (score):  {e['asr_score']:.1f}%")
             cb = e['class_breakdown']
@@ -272,7 +272,7 @@ class PerturbationMetrics:
                 print(f"  {cls_name:<14} {counts['before']:>8} {counts['after']:>8} "
                       f"{sign}{-counts['delta']:>7}")
             conf = e['confidence']
-            print(f"\n  ── Confidence Statistics ──")
+            print(f"\n  ── 置信度统计 ──")
             print(f"  {'':<10} {'Clean':>12} {'Adversarial':>12}")
             for stat in ['mean', 'median', 'min', 'max']:
                 print(f"  {stat:<10} {conf['clean'][stat]:>12.4f} {conf['adversarial'][stat]:>12.4f}")
