@@ -26,16 +26,30 @@ class NoiseAttacker(BaseAttacker):
         data_dict['points'] = points
         return data_dict
 
-def get_attacker(attack_type, severity):
+def get_attacker(attack_type, severity, **kwargs):
     if attack_type == 'none':
         return None
-    # 假设后续有 noise 和 drop 攻击
-    # elif attack_type == 'noise':
-    #     from .noise import NoiseAttacker
-    #     return NoiseAttacker(severity)
     elif attack_type == 'test':
         return TestAttacker(severity)
     elif attack_type == 'noise':
         return NoiseAttacker(severity)
+    elif attack_type == 'drop':
+        from .drop import DropAttacker
+        return DropAttacker(severity)
+    elif attack_type == 'spawn':
+        from .spawn import SpawnAttacker
+        return SpawnAttacker(severity)
+    elif attack_type == 'pgd':
+        from .pgd import PGDAttacker
+        return PGDAttacker(severity, **kwargs)
+    elif attack_type == 'perturb':
+        from .perturbation import PerturbationAttacker
+        return PerturbationAttacker(severity, **kwargs)
+    elif attack_type == 'scatter':
+        from .scatter import ScatterAttacker
+        return ScatterAttacker(severity)
+    elif attack_type == 'object':
+        from .object import ObjectAttacker
+        return ObjectAttacker(severity)
     else:
         raise ValueError(f"不支持的攻击类型: {attack_type}")
