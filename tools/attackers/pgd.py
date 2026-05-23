@@ -20,7 +20,8 @@ class PGDAttacker(BaseAttacker):
 
     def _compute_attack_loss(self, pred_dicts):
         """攻击损失：负的检测置信度和。梯度上升 → 置信度降低。"""
-        loss = 0.0
+        device = next((p['pred_scores'].device for p in pred_dicts if p['pred_scores'].numel() > 0), 'cpu')
+        loss = torch.tensor(0.0, device=device)
         for pred in pred_dicts:
             scores = pred['pred_scores']
             if scores.numel() > 0:
@@ -64,6 +65,7 @@ class PGDAttacker(BaseAttacker):
             with torch.enable_grad():
                 pred_dicts, _ = self.model(iter_dict)
                 loss = self._compute_attack_loss(pred_dicts)
+            if loss.requires_grad:
                 loss.backward()
 
             with torch.no_grad():

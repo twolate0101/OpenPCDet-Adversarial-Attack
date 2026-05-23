@@ -254,7 +254,7 @@ def main():
 
                 # ── 单帧可视化：攻击后 BEV + Plotly + PLY (仅黑盒有完整点云) ──
                 if do_viz:
-                    atk_viz_dir = viz_frame_dir / atk_type / f'sev_{sev:.1f}'
+                    atk_viz_dir = viz_frame_dir / atk_type / f'sev_{sev:.2f}'
                     atk_viz_dir.mkdir(parents=True, exist_ok=True)
 
                     adv_boxes = pred_adv['pred_boxes'].cpu().numpy()
@@ -265,7 +265,7 @@ def main():
                     BEVVisualizer.draw(
                         pts_for_bev, adv_boxes,
                         save_path=str(atk_viz_dir / 'adv_bev.png'),
-                        title=f'{frame_id} [{atk_type}] sev={sev:.1f} — ASR={asr:.1f}%',
+                        title=f'{frame_id} [{atk_type}] sev={sev:.2f} — ASR={asr:.1f}%',
                         labels=adv_labels)
 
                     # PLY (攻击后点云)
@@ -282,7 +282,7 @@ def main():
                             pts_clean=raw_pts[idx_c], pts_adv=attacked_pts_np[idx_a],
                             boxes=adv_boxes, labels=adv_labels,
                             save_path=str(atk_viz_dir / '3d_heatmap.html'),
-                            title=f'{frame_id} [{atk_type}] sev={sev:.1f} (ASR={asr:.1f}%)')
+                            title=f'{frame_id} [{atk_type}] sev={sev:.2f} (ASR={asr:.1f}%)')
 
                 result = dict(
                     frame=frame_id, severity=sev, asr=asr,
@@ -296,7 +296,7 @@ def main():
                 )
                 all_results[atk_type][sev].append(result)
 
-                logger.info(f'  [{atk_type}] sev={sev:.1f}: '
+                logger.info(f'  [{atk_type}] sev={sev:.2f}: '
                             f'{clean_stats["count"]}→{adv_stats["count"]} boxes '
                             f'(ASR={asr:.1f}%) '
                             f'pert={pert_metrics.get("mean", 0):.4f}m '

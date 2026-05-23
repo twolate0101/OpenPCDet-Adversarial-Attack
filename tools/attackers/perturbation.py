@@ -37,7 +37,8 @@ class PerturbationAttacker(BaseAttacker):
 
     def _compute_attack_loss(self, pred_dicts):
         """f(x'): 负的检测置信度和。归零=成功使所有目标消失."""
-        loss = 0.0
+        device = next((p['pred_scores'].device for p in pred_dicts if p['pred_scores'].numel() > 0), 'cpu')
+        loss = torch.tensor(0.0, device=device)
         for pred in pred_dicts:
             scores = pred['pred_scores']
             if scores.numel() > 0:
@@ -105,9 +106,12 @@ class PerturbationAttacker(BaseAttacker):
             if iteration % 10 == 0 or iteration == self.iterations - 1:
                 with torch.no_grad():
                     mean_delta = per_point_l2.sum().item() / (n_valid.item())
+                    tf = total_loss.item() if isinstance(total_loss, torch.Tensor) else total_loss
+                    ff = (-f_loss).item() if isinstance(f_loss, torch.Tensor) else -f_loss
+                    df = d_loss.item() if isinstance(d_loss, torch.Tensor) else d_loss
                     print(f"[C&W Perturb] iter {iteration + 1}/{self.iterations}, "
-                          f"total={total_loss.item():.4f}, sum_scores={(-f_loss).item():.4f}, "
-                          f"d={d_loss.item():.4f}, mean_delta={mean_delta:.4f}m, "
+                          f"total={tf:.4f}, sum_scores={ff:.4f}, "
+                          f"d={df:.4f}, mean_delta={mean_delta:.4f}m, "
                           f"λ={self.lambda_reg:.1f}")
 
         # ---- 写回扰动后的坐标 ----

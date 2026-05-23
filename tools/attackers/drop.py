@@ -22,9 +22,14 @@ class DropAttacker(BaseAttacker):
         keep_ratio = 1.0 - self.severity
         keep_mask = torch.rand(points.shape[0], device=points.device) < keep_ratio
 
-        # 至少保留一个点（确保后续体素化不崩溃）
-        if keep_mask.sum() == 0:
-            keep_mask[0] = True
+        # 至少保留 1% 或 100 个点，确保体素化不崩溃
+        min_keep = max(100, int(points.shape[0] * 0.01))
+        if keep_mask.sum() < min_keep:
+            alive = torch.where(keep_mask)[0]
+            extra_needed = min_keep - len(alive)
+            dead = torch.where(~keep_mask)[0]
+            resurrect = dead[torch.randperm(len(dead), device=dead.device)[:extra_needed]]
+            keep_mask[resurrect] = True
 
         data_dict['points'] = points[keep_mask]
 
