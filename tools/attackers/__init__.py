@@ -38,7 +38,7 @@ def get_attacker(attack_type, severity, **kwargs):
         return DropAttacker(severity)
     elif attack_type == 'spawn':
         from .spawn import SpawnAttacker
-        return SpawnAttacker(severity)
+        return SpawnAttacker(severity, **kwargs)
     elif attack_type == 'pgd':
         from .pgd import PGDAttacker
         return PGDAttacker(severity, **kwargs)
@@ -47,9 +47,9 @@ def get_attacker(attack_type, severity, **kwargs):
         return PerturbationAttacker(severity, **kwargs)
     elif attack_type == 'scatter':
         from .scatter import ScatterAttacker
-        return ScatterAttacker(severity)
+        return ScatterAttacker(severity, **kwargs)
     elif attack_type == 'object':
         from .object import ObjectAttacker
-        return ObjectAttacker(severity)
+        return ObjectAttacker(severity, **kwargs)
     else:
         raise ValueError(f"不支持的攻击类型: {attack_type}")

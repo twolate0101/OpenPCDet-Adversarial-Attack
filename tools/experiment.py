@@ -4,8 +4,9 @@
 批量运行多种攻击，多 severity 消融实验，自动收集度量并生成对比报告。
 
 支持的攻击类型:
-  黑盒 (速度快, 适合全量): noise, drop, spawn, scatter, object
-  白盒 (需梯度, 较慢):    pgd, perturb
+  黑盒 (速度快, 适合全量): noise, drop
+  白盒 (需梯度, 扰动):    pgd, perturb
+  插入 (需梯度, 加点):    spawn, scatter, object
 
 用法:
     # 快速消融: 所有攻击 × 3 个 severity × 单帧
@@ -45,9 +46,10 @@ from visual_utils.plotly_visualizer import PlotlyVisualizer
 from visual_utils.ply_exporter import PLYExporter
 
 CLS_NAMES = {1: 'Car', 2: 'Pedestrian', 3: 'Cyclist'}
-BLACKBOX_ATTACKS = ['noise', 'drop', 'spawn', 'scatter', 'object']
+BLACKBOX_ATTACKS = ['noise', 'drop']
 WHITEBOX_ATTACKS = ['pgd', 'perturb']
-ALL_ATTACKS = BLACKBOX_ATTACKS + WHITEBOX_ATTACKS
+INSERTION_ATTACKS = ['spawn', 'scatter', 'object']  # gradient-based point insertion
+ALL_ATTACKS = BLACKBOX_ATTACKS + WHITEBOX_ATTACKS + INSERTION_ATTACKS
 
 
 class DemoDataset(DatasetTemplate):
@@ -180,7 +182,9 @@ def main():
     all_results = defaultdict(lambda: defaultdict(list))
     clean_stats_list = []
 
-    attack_types = BLACKBOX_ATTACKS if args.skip_whitebox else ALL_ATTACKS
+    attack_types = BLACKBOX_ATTACKS
+    if not args.skip_whitebox:
+        attack_types += WHITEBOX_ATTACKS + INSERTION_ATTACKS
 
     for frame_idx in range(total_frames):
         raw_pts = raw_frame_points[frame_idx]
@@ -237,6 +241,25 @@ def main():
                     pt_idx = torch.arange(max_pts_val, device=original_xyz.device).unsqueeze(0)
                     vmask = (pt_idx < num_pts.unsqueeze(1)).float()
                     pert_metrics = PerturbationMetrics.l2_summary(original_xyz, perturbed_xyz, vmask)
+
+                elif atk_type in INSERTION_ATTACKS:
+                    # 插入型白盒攻击: 在 GPU data_dict 上添加对抗体素（论文 Section 5.1-5.3）
+                    attacker = get_attacker(atk_type, severity=sev, model=model,
+                                            iterations=args.iterations)
+                    d = clone_data_dict(data_dict_gpu)
+                    d = attacker.forward(d)
+                    with torch.no_grad():
+                        preds, _ = model.forward(d)
+                    pred_adv = preds[0]
+
+                    # 度量: 新增的体素数量及它们与原始点云的 Chamfer 距离
+                    n_orig = data_dict_gpu['voxel_num_points'].sum().item()
+                    n_adv = d['voxel_num_points'].sum().item()
+                    n_added = n_adv - n_orig
+                    pert_metrics = dict(
+                        mean=n_added,  # number of points added
+                        max=d['voxels'].shape[0] - data_dict_gpu['voxels'].shape[0],  # voxels added
+                    )
 
                 else:
                     # 黑盒攻击: 在原始点云上攻击, 走完整 prepare_data 管线
@@ -296,11 +319,18 @@ def main():
                 )
                 all_results[atk_type][sev].append(result)
 
-                logger.info(f'  [{atk_type}] sev={sev:.2f}: '
-                            f'{clean_stats["count"]}→{adv_stats["count"]} boxes '
-                            f'(ASR={asr:.1f}%) '
-                            f'pert={pert_metrics.get("mean", 0):.4f}m '
-                            f'({elapsed:.1f}s)')
+                if atk_type in INSERTION_ATTACKS:
+                    logger.info(f'  [{atk_type}] sev={sev:.2f}: '
+                                f'{clean_stats["count"]}→{adv_stats["count"]} boxes '
+                                f'(ASR={asr:.1f}%) '
+                                f'+{pert_metrics.get("mean", 0):.0f}pts '
+                                f'({elapsed:.1f}s)')
+                else:
+                    logger.info(f'  [{atk_type}] sev={sev:.2f}: '
+                                f'{clean_stats["count"]}→{adv_stats["count"]} boxes '
+                                f'(ASR={asr:.1f}%) '
+                                f'pert={pert_metrics.get("mean", 0):.4f}m '
+                                f'({elapsed:.1f}s)')
 
     # ======== 汇总报告 ========
     print_report(all_results, clean_stats_list, args.severities, attack_types, logger)
@@ -344,7 +374,7 @@ def print_report(all_results, clean_stats_list, severities, attack_types, logger
             print(f'  {np.mean(asr_list):>7.1f}%', end='')
         print()
 
-    # ─── Table 2: Perturbation Magnitude (white-box only) ───
+    # ─── Table 2: Perturbation Magnitude (white-box + insertion) ───
     wb_types = [a for a in attack_types if a in WHITEBOX_ATTACKS]
     if wb_types:
         print(f'\n  Table 2 — Perturbation Magnitude (mean L2, meters)')
@@ -363,6 +393,27 @@ def print_report(all_results, clean_stats_list, severities, attack_types, logger
                     print(f'{avg_pert:>11.4f}m', end='')
                 else:
                     print(f'{"N/A":>12}', end='')
+            print()
+
+    # ─── Table 2b: Insertion Attack Overhead ───
+    ins_types = [a for a in attack_types if a in INSERTION_ATTACKS]
+    if ins_types:
+        print(f'\n  Table 2b — Insertion Attack Overhead (avg points / voxels added)')
+        print(f'  {"Attack":<12} {"pts_added":>12} {"vox_added":>12} {"pts/frame":>12}')
+        print(f'  {"─"*12} {"─"*12} {"─"*12} {"─"*12}')
+
+        for atk_type in ins_types:
+            print(f'  {atk_type:<12}', end='')
+            all_pts = []
+            all_vox = []
+            for sev in severities:
+                for r in all_results[atk_type][sev]:
+                    all_pts.append(r['pert_mean'])  # points added
+                    all_vox.append(r['pert_max'])   # voxels added
+            if all_pts:
+                print(f'{np.mean(all_pts):>11.0f}', end='')
+                print(f'{np.mean(all_vox):>11.0f}', end='')
+                print(f'{np.mean(all_pts):>11.0f}', end='')
             print()
 
     # ─── Table 3: Per-Class ASR (averaged across severities) ───
@@ -388,6 +439,7 @@ def print_report(all_results, clean_stats_list, severities, attack_types, logger
         print()
 
     # ─── Summary ───
+    ins_types = [a for a in attack_types if a in INSERTION_ATTACKS]
     print(f'\n  ── Key Takeaways ──')
     # Best attack (highest ASR)
     best_asr = -999
@@ -418,6 +470,23 @@ def print_report(all_results, clean_stats_list, severities, attack_types, logger
                         best_stealth = (atk_type, sev)
         print(f'  Best ASR/perturbation: {best_stealth[0]} @ severity={best_stealth[1]:.1f} '
               f'(ASR/m = {best_ratio:.1f})')
+
+    # Most efficient insertion (best ASR per point added)
+    if ins_types:
+        best_eff = -999
+        best_ins = ('', 0.0)
+        for atk_type in ins_types:
+            for sev in severities:
+                results = all_results[atk_type][sev]
+                if results:
+                    asr = np.mean([r['asr'] for r in results])
+                    pts = max(np.mean([r['pert_mean'] for r in results]), 1)
+                    eff = asr / pts * 100  # ASR per 100 points
+                    if eff > best_eff:
+                        best_eff = eff
+                        best_ins = (atk_type, sev)
+        print(f'  Best ASR/point: {best_ins[0]} @ severity={best_ins[1]:.1f} '
+              f'(ASR/100pts = {best_eff:.1f})')
 
     print(f'{"="*80}\n')
 
@@ -565,12 +634,14 @@ def save_visualizations(all_results, clean_stats_list, severities, attack_types)
     plt.close(fig3)
 
     # ================================================================
-    # Figure 4: Perturbation vs ASR Trade-off (white-box attacks)
+    # Figure 4: Perturbation vs ASR Trade-off (white-box + insertion)
     # ================================================================
     wb_types = [a for a in attack_types if a in WHITEBOX_ATTACKS]
-    if wb_types:
+    ins_types = [a for a in attack_types if a in INSERTION_ATTACKS]
+    if wb_types or ins_types:
         fig4, ax4 = plt.subplots(figsize=(7, 5.5))
 
+        # White-box: L2 perturbation
         for i, atk in enumerate(wb_types):
             sev_vals = []
             asr_vals = []
@@ -583,15 +654,34 @@ def save_visualizations(all_results, clean_stats_list, severities, attack_types)
                     pert_vals.append(np.mean([r['pert_mean'] for r in results]))
             if sev_vals:
                 ax4.plot(pert_vals, asr_vals, 'o-', color=colors_atk[atk_labels.index(atk)],
-                         linewidth=2, markersize=10, label=atk, markeredgecolor='white')
+                         linewidth=2, markersize=10, label=f'{atk} (L2)', markeredgecolor='white')
                 for s, a, p in zip(sev_vals, asr_vals, pert_vals):
                     ax4.annotate(f'sev={s:.1f}', (p, a), textcoords='offset points',
                                  xytext=(8, 4), fontsize=8, alpha=0.85,
                                  bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7))
 
-        ax4.set_xlabel('Mean Perturbation L2 (meters)')
+        # Insertion: points added
+        for i, atk in enumerate(ins_types):
+            sev_vals = []
+            asr_vals = []
+            pert_vals = []
+            for j, sev in enumerate(severities):
+                results = all_results[atk][sev]
+                if results:
+                    sev_vals.append(sev)
+                    asr_vals.append(np.mean([r['asr'] for r in results]))
+                    pert_vals.append(np.mean([r['pert_mean'] for r in results]))
+            if sev_vals:
+                ax4.plot(pert_vals, asr_vals, 's--', color=colors_atk[atk_labels.index(atk)],
+                         linewidth=2, markersize=10, label=f'{atk} (pts)', markeredgecolor='white')
+                for s, a, p in zip(sev_vals, asr_vals, pert_vals):
+                    ax4.annotate(f'sev={s:.1f}', (p, a), textcoords='offset points',
+                                 xytext=(8, 4), fontsize=8, alpha=0.85,
+                                 bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7))
+
+        ax4.set_xlabel('Attack Magnitude (L2 meters / points added)')
         ax4.set_ylabel('Attack Success Rate (%)')
-        ax4.set_title(f'Fig 4: ASR vs Perturbation Magnitude Trade-off\n({n_frames} frames)')
+        ax4.set_title(f'Fig 4: ASR vs Attack Magnitude Trade-off\n({n_frames} frames)')
         ax4.legend(framealpha=0.9)
         ax4.grid(alpha=0.3, linestyle='--')
         fig4.tight_layout()
@@ -650,25 +740,24 @@ def save_visualizations(all_results, clean_stats_list, severities, attack_types)
     ax5c.set_title('Per-Class Detection Change (%)', fontweight='bold')
     fig5.colorbar(im2, ax=ax5c, shrink=0.85)
 
-    # Subplot 4: Box count comparison (bottom-right)
+    # Subplot 4: Box count comparison (bottom-right) — all attacks
     ax5d = fig5.add_subplot(2, 2, 4)
-    bb_atk_types = [a for a in attack_types if a in BLACKBOX_ATTACKS]
-    bb_colors = plt.cm.Set2(np.linspace(0, 1, len(bb_atk_types)))
+    all_atk_colors = plt.cm.Set2(np.linspace(0, 1, len(atk_labels)))
     avg_adv_counts = []
-    for i, atk in enumerate(bb_atk_types):
+    for i, atk in enumerate(atk_labels):
         all_adv = []
         for sev in severities:
             for r in all_results[atk][sev]:
                 all_adv.append(r['adv_count'])
         avg_adv_counts.append(np.mean(all_adv) if all_adv else 0)
-    bars2 = ax5d.barh(bb_atk_types, avg_adv_counts, color=bb_colors, edgecolor='white')
+    bars2 = ax5d.barh(atk_labels, avg_adv_counts, color=all_atk_colors, edgecolor='white')
     ax5d.axvline(x=avg_clean, color='red', linewidth=2, linestyle='--',
                  label=f'Clean avg ({avg_clean:.1f})')
     for bar, val in zip(bars2, avg_adv_counts):
         ax5d.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height() / 2,
                   f'{val:.1f}', va='center', fontsize=9, fontweight='bold')
     ax5d.set_xlabel('Avg Detections per Frame')
-    ax5d.set_title('Detection Count After Attack (avg across severities)', fontweight='bold')
+    ax5d.set_title('Detection Count After Attack (all attacks)', fontweight='bold')
     ax5d.legend(fontsize=8)
     ax5d.grid(axis='x', alpha=0.3, linestyle='--')
 
