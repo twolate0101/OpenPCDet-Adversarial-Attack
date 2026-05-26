@@ -4,11 +4,36 @@ import datetime
 import glob
 import os
 import re
+import sys
 import time
 from pathlib import Path
 
 import numpy as np
 import torch
+
+# === numba CUDA 兼容性修补 ===
+# PyTorch 先初始化 CUDA 后，numba 0.58.1 读到 ac.devnum 越界（如 devnum=8），
+# 导致 rotate_iou.py 的 @cuda.jit 编译失败。
+# 修补方法: 让 _get_or_create_context_uncached 在 devnum 越界时回退到设备 0。
+def _patch_numba_cuda():
+    try:
+        from numba.cuda.cudadrv import devices as _dev_mod
+        _runtime = _dev_mod._runtime
+        _orig_method = _runtime._get_or_create_context_uncached
+
+        def _patched(devnum):
+            try:
+                return _orig_method(devnum)
+            except (IndexError, KeyError):
+                return _runtime._activate_context_for(0)
+
+        _runtime._get_or_create_context_uncached = _patched
+    except Exception:
+        pass  # numba 不可用则跳过
+
+_patch_numba_cuda()
+# === numba 修补结束 ===
+
 from tensorboardX import SummaryWriter
 
 from eval_utils import eval_utils
