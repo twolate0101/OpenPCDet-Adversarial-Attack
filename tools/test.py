@@ -230,23 +230,30 @@ def main():
     )
 
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=test_set)
-    # === PyTorch Hook 机制拦截 ===
-    # 当底层代码调用 model(batch_dict) 时，会先自动执行下面这个 attack_hook
+    # === 攻击注入 ===
+    # 黑盒攻击（noise/drop/geo_drop）: 通过 dataset._attacker 在体素化前修改点云
+    # 白盒攻击（pgd/perturb/spawn/scatter/object）: 通过 forward_pre_hook 在模型推理前修改 voxels
     sys.path.append('..')
     try:
         from attackers import get_attacker
-        attacker = get_attacker(args.attack, args.severity)
-        if attacker is not None:
-            logger.info(f"🚨 注入网络前向传播 Hook: {args.attack}, 强度: {args.severity}")
-            
-            def attack_hook(module, args_tuple):
-                # args_tuple 包含了传入 forward 函数的参数，这里是 (batch_dict,)
-                batch_dict = args_tuple[0]
-                batch_dict = attacker.forward(batch_dict)
-                return (batch_dict,)
-            
-            # 将钩子注册到模型上
-            model.register_forward_pre_hook(attack_hook)
+        BLACKBOX_ATTACKS = {'noise', 'drop', 'geo_drop'}
+        is_blackbox = args.attack in BLACKBOX_ATTACKS
+
+        if is_blackbox:
+            attacker = get_attacker(args.attack, args.severity)
+            if attacker is not None:
+                test_set._attacker = attacker
+                logger.info(f"🚨 注入黑盒攻击到 dataset: {args.attack}, 强度: {args.severity}")
+        elif args.attack != 'none':
+            attacker = get_attacker(args.attack, args.severity, model=model,
+                                    iterations=getattr(args, 'iterations', 20))
+            if attacker is not None:
+                def attack_hook(module, args_tuple):
+                    batch_dict = args_tuple[0]
+                    batch_dict = attacker.forward(batch_dict)
+                    return (batch_dict,)
+                model.register_forward_pre_hook(attack_hook)
+                logger.info(f"🚨 注入白盒攻击 Hook: {args.attack}, 强度: {args.severity}")
     except ImportError:
         logger.warning("未找到 attackers 模块，不进行攻击。")
         

@@ -46,7 +46,7 @@ from visual_utils.plotly_visualizer import PlotlyVisualizer
 from visual_utils.ply_exporter import PLYExporter
 
 CLS_NAMES = {1: 'Car', 2: 'Pedestrian', 3: 'Cyclist'}
-BLACKBOX_ATTACKS = ['noise', 'drop']
+BLACKBOX_ATTACKS = ['noise', 'drop', 'geo_drop']
 WHITEBOX_ATTACKS = ['pgd', 'perturb']
 INSERTION_ATTACKS = ['spawn', 'scatter', 'object']  # gradient-based point insertion
 ALL_ATTACKS = BLACKBOX_ATTACKS + WHITEBOX_ATTACKS + INSERTION_ATTACKS

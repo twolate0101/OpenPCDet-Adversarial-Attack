@@ -4,8 +4,9 @@
 攻击分类体系（基于 CVPR 2019 "Generating 3D Adversarial Point Clouds"）:
 
   BLACKBOX（黑盒攻击）: 不依赖模型梯度的攻击
-    - noise:   点坐标高斯噪声（模拟传感器干扰）
-    - drop:    随机点云删除（模拟遮挡/信号丢失）
+    - noise:    点坐标高斯噪声（模拟传感器干扰）
+    - drop:     随机点云删除（模拟遮挡/信号丢失）
+    - geo_drop: 几何感知删除（优先删除距质心近的目标区域点）
 
   WHITEBOX（白盒扰动攻击）: 基于模型梯度的点坐标扰动
     - pgd:     PGD 迭代梯度攻击（投影梯度下降，L2 epsilon 球约束）
@@ -24,6 +25,7 @@
 
 from .base import BaseAttacker
 import torch
+import numpy as np
 
 
 class TestAttacker(BaseAttacker):
@@ -44,9 +46,12 @@ class NoiseAttacker(BaseAttacker):
     """
     def forward(self, data_dict):
         points = data_dict['points']
+        is_numpy = isinstance(points, np.ndarray)
+        if is_numpy:
+            points = torch.from_numpy(points).float()
         noise = torch.randn_like(points[:, :3]) * self.severity
         points[:, :3] += noise
-        data_dict['points'] = points
+        data_dict['points'] = points.cpu().numpy() if is_numpy else points
         return data_dict
 
 
@@ -71,6 +76,9 @@ def get_attacker(attack_type, severity, **kwargs):
     elif attack_type == 'drop':
         from .drop import DropAttacker
         return DropAttacker(severity)
+    elif attack_type == 'geo_drop':
+        from .geo_drop import GeoDropAttacker
+        return GeoDropAttacker(severity)
     elif attack_type == 'spawn':
         from .spawn import SpawnAttacker
         return SpawnAttacker(severity, **kwargs)
