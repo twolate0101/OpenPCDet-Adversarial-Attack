@@ -21,3 +21,8 @@ data/kitti/ImageSets/val.txt
 data/kitti/ImageSets/train.txt
 data/kitti/ImageSets/test.txt
 *.png
+
+# 实验结果（二进制文件不入库）
+tools/result/
+tools/result_bev*.png
+tools/result_bev*.html
