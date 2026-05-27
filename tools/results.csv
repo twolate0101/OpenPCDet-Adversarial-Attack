@@ -1,7 +1,7 @@
-attack,severity,car_3d_ap40_mod,ped_3d_ap40_mod,cyc_3d_ap40_mod,attack_type
-baseline,-,78.40,51.43,62.92,none
-drop,0.5,70.04,39.89,44.60,blackbox
-geo_drop,0.5,35.56,12.40,25.67,blackbox
-noise,0.5,0.04,0.00,0.00,blackbox
-perturb,0.5,0.60,0.78,1.39,whitebox
-pgd,0.3,0.14,0.09,0.12,whitebox
+attack,severity,attack_type,car_3d_ap40_mod,ped_3d_ap40_mod,cyc_3d_ap40_mod,recall_0.3,recall_0.5,recall_0.7
+baseline,-,none,78.40,51.43,62.92,94.11,88.71,63.90
+drop,0.5,blackbox,70.04,39.89,44.60,90.93,82.94,56.31
+geo_drop,0.5,blackbox,35.56,12.40,25.67,63.71,58.19,36.88
+noise,0.5,blackbox,0.04,0.00,0.00,32.50,14.56,1.46
+perturb,0.5,whitebox,0.60,0.78,1.39,12.38,8.12,2.97
+pgd,0.3,whitebox,0.14,0.09,0.12,18.07,12.06,3.53
