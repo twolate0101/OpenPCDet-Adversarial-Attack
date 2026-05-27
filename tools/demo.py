@@ -91,7 +91,7 @@ def main():
 
     # === 攻击器加载（延迟到 model 创建后） ===
     sys.path.append('..')
-    BLACKBOX_ATTACKS = {'noise', 'drop', 'geo_drop'}
+    BLACKBOX_ATTACKS = {'noise', 'drop', 'geo_drop', 'ghost_template'}
     whitebox_attacker = None
 
 
