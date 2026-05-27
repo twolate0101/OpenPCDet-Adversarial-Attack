@@ -238,7 +238,7 @@ def main():
     whitebox_attacker = None
     try:
         from attackers import get_attacker
-        BLACKBOX_ATTACKS = {'noise', 'drop', 'geo_drop'}
+        BLACKBOX_ATTACKS = {'noise', 'drop', 'geo_drop', 'ghost_template'}
         is_blackbox = args.attack in BLACKBOX_ATTACKS
 
         if is_blackbox:
