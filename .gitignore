@@ -22,7 +22,7 @@ data/kitti/ImageSets/train.txt
 data/kitti/ImageSets/test.txt
 *.png
 
-# 实验输出（排除大型二进制，保留 CSV 和论文图表）
-tools/result/frames/
+# 实验输出（二进制文件不入库，结果在服务器上重新生成即可）
+tools/result/
 tools/result_bev*.png
 tools/result_bev*.html
