@@ -1,0 +1,7 @@
+attack,severity,car_3d_ap40_mod,ped_3d_ap40_mod,cyc_3d_ap40_mod,attack_type
+baseline,-,78.40,51.43,62.92,none
+drop,0.5,70.04,39.89,44.60,blackbox
+geo_drop,0.5,35.56,12.40,25.67,blackbox
+noise,0.5,0.04,0.00,0.00,blackbox
+perturb,0.5,0.60,0.78,1.39,whitebox
+pgd,0.3,0.14,0.09,0.12,whitebox
