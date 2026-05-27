@@ -112,13 +112,6 @@ class PGDAttacker(BaseAttacker):
                     delta = delta / scale
                     xyz = original_xyz + delta * valid_mask.unsqueeze(-1)
 
-            if iteration % 2 == 0 or iteration == self.iterations - 1:
-                with torch.no_grad():
-                    mean_delta = (xyz - original_xyz).norm(dim=-1)[valid_mask.bool()].mean().item()
-                    grad_norm = grad.norm().item() if grad is not None else 0.0
-                    print(f"[PGD] iter {iteration + 1}/{self.iterations}, "
-                          f"loss={loss.item():.4f}, |grad|={grad_norm:.4f}, "
-                          f"mean_delta={mean_delta:.4f}m")
 
         data_dict['voxels'] = torch.cat([xyz, intensity], dim=-1)
         return data_dict

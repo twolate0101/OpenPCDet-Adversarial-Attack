@@ -19,7 +19,7 @@ def statistics_info(cfg, ret_dict, metric, disp_dict):
         '(%d, %d) / %d' % (metric['recall_roi_%s' % str(min_thresh)], metric['recall_rcnn_%s' % str(min_thresh)], metric['gt_num'])
 
 
-def eval_one_epoch(cfg, args, model, dataloader, epoch_id, logger, dist_test=False, result_dir=None):
+def eval_one_epoch(cfg, args, model, dataloader, epoch_id, logger, dist_test=False, result_dir=None, whitebox_attacker=None):
     result_dir.mkdir(parents=True, exist_ok=True)
 
     final_output_dir = result_dir / 'final_result' / 'data'
@@ -60,6 +60,11 @@ def eval_one_epoch(cfg, args, model, dataloader, epoch_id, logger, dist_test=Fal
 
         if getattr(args, 'infer_time', False):
             start_time = time.time()
+
+        # 白盒攻击：在模型推理前对 voxels 执行梯度攻击（需要梯度）
+        if whitebox_attacker is not None:
+            with torch.enable_grad():
+                batch_dict = whitebox_attacker.forward(batch_dict)
 
         with torch.no_grad():
             pred_dicts, ret_dict = model(batch_dict)

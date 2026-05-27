@@ -222,8 +222,4 @@ class ObjectAttacker(BaseAttacker):
             new_npts = torch.full((N,), n_actual, dtype=torch.long, device=device)
             data_dict['voxel_num_points'] = torch.cat([vault['voxel_num_points'], new_npts], dim=0)
 
-        print(f"[Object] severity={self.severity:.2f}: "
-              f"{N} 个物体 @ 脆弱区域, "
-              f"尺寸={final_size.mean(dim=0).cpu().numpy()}, {self.iterations} 轮迭代")
-
         return data_dict

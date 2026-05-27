@@ -66,8 +66,9 @@ def parse_config():
     parser.add_argument('--save_to_file', action='store_true', default=False, help='')
     parser.add_argument('--infer_time', action='store_true', default=False, help='calculate inference latency')
 
-    parser.add_argument('--attack', type=str, default='none', help='Attack type: none, drop, noise, etc.')
+    parser.add_argument('--attack', type=str, default='none', help='Attack type: none, drop, noise, pgd, perturb, etc.')
     parser.add_argument('--severity', type=float, default=1.0, help='Attack severity')
+    parser.add_argument('--iterations', type=int, default=20, help='Number of iterations for whitebox attacks')
 
     args = parser.parse_args()
 
@@ -83,16 +84,16 @@ def parse_config():
     return args, cfg
 
 
-def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=False):
+def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=False, whitebox_attacker=None):
     # load checkpoint
-    model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=dist_test, 
+    model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=dist_test,
                                 pre_trained_path=args.pretrained_model)
     model.cuda()
-    
+
     # start evaluation
     eval_utils.eval_one_epoch(
         cfg, args, model, test_loader, epoch_id, logger, dist_test=dist_test,
-        result_dir=eval_output_dir
+        result_dir=eval_output_dir, whitebox_attacker=whitebox_attacker
     )
 
 
@@ -230,23 +231,26 @@ def main():
     )
 
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=test_set)
-    # === PyTorch Hook 机制拦截 ===
-    # 当底层代码调用 model(batch_dict) 时，会先自动执行下面这个 attack_hook
+    # === 攻击注入 ===
+    # 黑盒攻击（noise/drop/geo_drop）: 通过 dataset._attacker 在体素化前修改点云
+    # 白盒攻击（pgd/perturb/spawn/scatter/object）: 通过 eval_utils 的 whitebox_attacker 参数注入
     sys.path.append('..')
+    whitebox_attacker = None
     try:
         from attackers import get_attacker
-        attacker = get_attacker(args.attack, args.severity)
-        if attacker is not None:
-            logger.info(f"🚨 注入网络前向传播 Hook: {args.attack}, 强度: {args.severity}")
-            
-            def attack_hook(module, args_tuple):
-                # args_tuple 包含了传入 forward 函数的参数，这里是 (batch_dict,)
-                batch_dict = args_tuple[0]
-                batch_dict = attacker.forward(batch_dict)
-                return (batch_dict,)
-            
-            # 将钩子注册到模型上
-            model.register_forward_pre_hook(attack_hook)
+        BLACKBOX_ATTACKS = {'noise', 'drop', 'geo_drop'}
+        is_blackbox = args.attack in BLACKBOX_ATTACKS
+
+        if is_blackbox:
+            attacker = get_attacker(args.attack, args.severity)
+            if attacker is not None:
+                test_set._attacker = attacker
+                logger.info(f"🚨 注入黑盒攻击到 dataset: {args.attack}, 强度: {args.severity}")
+        elif args.attack != 'none':
+            whitebox_attacker = get_attacker(args.attack, args.severity, model=model,
+                                             iterations=getattr(args, 'iterations', 20))
+            if whitebox_attacker is not None:
+                logger.info(f"🚨 注入白盒攻击: {args.attack}, 强度: {args.severity}")
     except ImportError:
         logger.warning("未找到 attackers 模块，不进行攻击。")
         
@@ -254,7 +258,7 @@ def main():
         if args.eval_all:
             repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir, dist_test=dist_test)
         else:
-            eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=dist_test)
+            eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=dist_test, whitebox_attacker=whitebox_attacker)
 
 
 if __name__ == '__main__':

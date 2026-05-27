@@ -192,8 +192,4 @@ class SpawnAttacker(BaseAttacker):
         data_dict['voxel_num_points'] = original_num_pts.clone()
         data_dict = self._add_voxels(data_dict, adv_xyz.detach(), adv_intensity)
 
-        print(f"[Spawn] severity={self.severity:.2f}: "
-              f"{N} 个点簇 @ {len(centers)} 个脆弱区域, "
-              f"r={r:.1f}m, {self.iterations} 轮迭代")
-
         return data_dict

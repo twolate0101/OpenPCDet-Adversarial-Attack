@@ -205,6 +205,16 @@ class DatasetTemplate(torch_data.Dataset):
         if data_dict.get('points', None) is not None:
             data_dict = self.point_feature_encoder.forward(data_dict)
 
+        # >>> 对抗攻击注入点（体素化前拦截）<<<
+        # 通过外部设置 self._attacker 注入攻击器，黑盒攻击在此处修改点云
+        # 注意：此处运行在 DataLoader 子进程中，不能调用 .cuda()
+        if hasattr(self, '_attacker') and self._attacker is not None:
+            tmp_dict = {'points': data_dict['points']}
+            tmp_dict = self._attacker.forward(tmp_dict)
+            data_dict['points'] = tmp_dict['points']
+            if isinstance(data_dict['points'], torch.Tensor):
+                data_dict['points'] = data_dict['points'].numpy()
+
         data_dict = self.data_processor.forward(
             data_dict=data_dict
         )
