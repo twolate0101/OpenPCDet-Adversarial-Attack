@@ -6,6 +6,8 @@ data/
 *.pyc
 venv/
 *.idea/
+.qoder/
+.vscode/
 *.so
 *.yaml
 *.sh
@@ -25,4 +27,5 @@ data/kitti/ImageSets/test.txt
 # 实验输出（二进制文件不入库，结果在服务器上重新生成即可）
 tools/result/
 tools/result_bev*.png
+tools/result_bev*.jpg
 tools/result_bev*.html

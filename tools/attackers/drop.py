@@ -18,6 +18,7 @@
 """
 
 import torch
+import numpy as np
 from .base import BaseAttacker
 
 
@@ -30,10 +31,13 @@ class DropAttacker(BaseAttacker):
 
     def forward(self, data_dict):
         points = data_dict['points']
+        is_numpy = isinstance(points, np.ndarray)
+        if is_numpy:
+            points = torch.from_numpy(points).float()
 
         # 生成保留掩码: 以概率 (1 - severity) 保留每个点
         keep_ratio = 1.0 - self.severity
-        keep_mask = torch.rand(points.shape[0], device=points.device) < keep_ratio
+        keep_mask = torch.rand(points.shape[0]) < keep_ratio
 
         # 保留至少 1% 或 100 个点，确保体素化不崩溃
         min_keep = max(100, int(points.shape[0] * 0.01))
@@ -41,13 +45,10 @@ class DropAttacker(BaseAttacker):
             alive = torch.where(keep_mask)[0]
             extra_needed = min_keep - len(alive)
             dead = torch.where(~keep_mask)[0]
-            resurrect = dead[torch.randperm(len(dead), device=dead.device)[:extra_needed]]
+            resurrect = dead[torch.randperm(len(dead))[:extra_needed]]
             keep_mask[resurrect] = True
 
-        data_dict['points'] = points[keep_mask]
-
-        n_total = points.shape[0]
-        n_kept = keep_mask.sum().item()
-        print(f"[Drop] {n_total} → {n_kept} 点 ({n_kept / n_total * 100:.1f}% 保留)")
+        result = points[keep_mask]
+        data_dict['points'] = result.cpu().numpy() if is_numpy else result
 
         return data_dict

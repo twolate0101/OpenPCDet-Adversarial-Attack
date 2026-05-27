@@ -76,8 +76,4 @@ class GeoDropAttacker(BaseAttacker):
         result = points[keep_indices]
         data_dict['points'] = result.cpu().numpy() if is_numpy else result
 
-        print(f"[GeoDrop] {num_pts} → {keep_count} 点 "
-              f"({keep_count / num_pts * 100:.1f}% 保留, "
-              f"删除距质心最近的 {drop_count} 个点)")
-
         return data_dict

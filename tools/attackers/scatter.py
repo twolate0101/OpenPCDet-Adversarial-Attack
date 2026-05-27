@@ -169,8 +169,4 @@ class ScatterAttacker(BaseAttacker):
         new_npts = torch.ones(N_total, dtype=torch.long, device=device)
         data_dict['voxel_num_points'] = torch.cat([vault['voxel_num_points'], new_npts], dim=0)
 
-        print(f"[Scatter] severity={self.severity:.2f}: "
-              f"{N_total} 个散点 @ {len(centers)} 个脆弱区域, "
-              f"散布={self.scatter_sigma:.1f}m, {self.iterations} 轮迭代")
-
         return data_dict

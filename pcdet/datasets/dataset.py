@@ -207,11 +207,13 @@ class DatasetTemplate(torch_data.Dataset):
 
         # >>> 对抗攻击注入点（体素化前拦截）<<<
         # 通过外部设置 self._attacker 注入攻击器，黑盒攻击在此处修改点云
+        # 注意：此处运行在 DataLoader 子进程中，不能调用 .cuda()
         if hasattr(self, '_attacker') and self._attacker is not None:
-            pt_tensor = torch.from_numpy(data_dict['points']).cuda()
-            tmp_dict = {'points': pt_tensor}
+            tmp_dict = {'points': data_dict['points']}
             tmp_dict = self._attacker.forward(tmp_dict)
-            data_dict['points'] = tmp_dict['points'].cpu().numpy()
+            data_dict['points'] = tmp_dict['points']
+            if isinstance(data_dict['points'], torch.Tensor):
+                data_dict['points'] = data_dict['points'].numpy()
 
         data_dict = self.data_processor.forward(
             data_dict=data_dict
