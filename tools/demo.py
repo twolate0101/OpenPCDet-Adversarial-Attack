@@ -74,8 +74,9 @@ def parse_config():
                         help='specify the point cloud data file or directory')
     parser.add_argument('--ckpt', type=str, default=None, help='specify the pretrained model')
     parser.add_argument('--ext', type=str, default='.bin', help='specify the extension of your point cloud data file')
-    parser.add_argument('--attack', type=str, default='none', help='none,noise,drop 等')
+    parser.add_argument('--attack', type=str, default='none', help='none,noise,drop,pgd,perturb,spawn 等')
     parser.add_argument('--severity', type=float, default=1.0, help='攻击强度')
+    parser.add_argument('--iterations', type=int, default=10, help='白盒攻击迭代次数')
     args = parser.parse_args()
 
     cfg_from_yaml_file(args.cfg_file, cfg)
@@ -88,16 +89,10 @@ def main():
     logger = common_utils.create_logger()
     logger.info('-----------------Quick Demo of OpenPCDet-------------------------')
 
-    # === 动态加载攻击器 ===
+    # === 攻击器加载（延迟到 model 创建后） ===
     sys.path.append('..')
-    try:
-        from attackers import get_attacker
-        attacker = get_attacker(args.attack,args.severity)
-        if attacker is not None:
-            logger.info(f"✅ 已启用攻击模式: {args.attack}，强度: {args.severity}")
-    except ImportError:
-        attacker = None
-        logger.warning("⚠️ 未找到attacker模块,将以正常模式运行.")
+    BLACKBOX_ATTACKS = {'noise', 'drop', 'geo_drop'}
+    whitebox_attacker = None
 
 
     demo_dataset = DemoDataset(
@@ -105,41 +100,35 @@ def main():
         root_path=Path(args.data_path), ext=args.ext, logger=logger
     )
     logger.info(f'Total number of samples: \t{len(demo_dataset)}')
-    # === 【终极拦截点前移：动态劫持体素化流程】 ===
-    if attacker is not None:
-        import types
-        original_prepare_data = demo_dataset.prepare_data
-        
-        def hooked_prepare_data(self, data_dict):
-            """
-            在数据被切分成体素前，强行拉到显存进行攻击，然后再放回内存进行体素化。
-            """
-            # 在数据被下毒前，深拷贝一份干净点云
-            # 这是后续 Plotly 计算“扰动热力图 (Delta)”的绝对前提
-            self.last_clean_points = data_dict['points'].copy()
 
-            # 1. 此时 input_dict 里只有最原始的 numpy 点云
-            pt_tensor = torch.from_numpy(data_dict['points']).cuda()
-            
-            # 2. 包装成你的 Attacker 认识的格式
-            tmp_dict = {'points': pt_tensor}
-            tmp_dict = attacker.forward(tmp_dict)
-            
-            # 3. 攻击完成后，将带毒的点云转回 CPU numpy，覆盖回去
-            data_dict['points'] = tmp_dict['points'].cpu().numpy()
-            
-            # 4. 把带毒的数据扔给 OpenPCDet 原生的体素化算子
-            return original_prepare_data(data_dict=data_dict)
-        
-        # 将劫持后的函数强制绑定给 demo_dataset
-        demo_dataset.prepare_data = types.MethodType(hooked_prepare_data, demo_dataset)
-    # ===============================================
+    # === 黑盒攻击：通过 dataset._attacker 在体素化前注入 ===
+    blackbox_attacker = None
+    try:
+        from attackers import get_attacker
+        if args.attack in BLACKBOX_ATTACKS:
+            blackbox_attacker = get_attacker(args.attack, args.severity)
+            if blackbox_attacker is not None:
+                demo_dataset._attacker = blackbox_attacker
+                logger.info(f'✅ 黑盒攻击: {args.attack}, 强度: {args.severity}')
+    except ImportError:
+        logger.warning('⚠️ 未找到attacker模块,将以正常模式运行.')
 
 
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=demo_dataset)
     model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=True)
     model.cuda()
     model.eval()
+
+    # === 白盒攻击：需要 model 引用，在 GPU 推理前注入 ===
+    if args.attack not in BLACKBOX_ATTACKS and args.attack != 'none':
+        try:
+            from attackers import get_attacker
+            whitebox_attacker = get_attacker(args.attack, args.severity, model=model,
+                                             iterations=args.iterations)
+            if whitebox_attacker is not None:
+                logger.info(f"✅ 白盒攻击: {args.attack}, 强度: {args.severity}")
+        except ImportError:
+            pass
 
     # 创建统一的可视化输出目录，
     out_dir = Path('output/viz_results')
@@ -149,8 +138,17 @@ def main():
     with torch.no_grad():
         for idx, data_dict in enumerate(demo_dataset):
             logger.info(f'Visualized sample index: \t{idx + 1}')
+            # 保存干净点云（用于可视化扰动热力图）
+            clean_points = data_dict['points'].copy()
+
             data_dict = demo_dataset.collate_batch([data_dict])
             load_data_to_gpu(data_dict)
+
+            # 白盒攻击：在模型推理前对 voxels 执行梯度攻击
+            if whitebox_attacker is not None:
+                with torch.enable_grad():
+                    data_dict = whitebox_attacker.forward(data_dict)
+
             pred_dicts, _ = model.forward(data_dict)
 
             # V.draw_scenes(
@@ -176,8 +174,7 @@ def main():
             pred_labels = pred_dicts[0]['pred_labels'].cpu().numpy() # 🌟 新增：提取标签
             
             # 获取干净点云 (用于 Plotly 算扰动)
-            clean_points_raw = getattr(demo_dataset, 'last_clean_points', None)
-            clean_points_xyz = clean_points_raw[:, :3] if clean_points_raw is not None else adv_points_xyz
+            clean_points_xyz = clean_points[:, :3]
 
             # 2. 调用三大可视化模块
             # [A] BEV 鸟瞰图 (传入 labels 让框变色)
