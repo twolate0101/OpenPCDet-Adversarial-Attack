@@ -451,12 +451,11 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
 | pgd | 白盒扰动 | 0.3 | 0.14 | 0.09 | 0.12 |
 | perturb | 白盒扰动 | 0.5 | 0.60 | 0.78 | 1.39 |
 | saliency_mask | 白盒删除 | 0.3 | 37.06 | 0.004 | 0.015 |
-| spawn | 白盒插入 | — | — | — | — |
-| scatter | 白盒插入 | — | — | — | — |
-| object | 白盒插入 | — | — | — | — |
-| ghost_template | 黑盒插入 | — | — | — | — |
-
-> 注: `—` 表示尚未运行全量 mAP 测试。
+| saliency_mask | 白盒删除 | 0.5 | 11.89 | 0.00 | 0.00 |
+| spawn | 白盒插入 | 0.5 | 78.32 | 50.55 | 62.12 |
+| scatter | 白盒插入 | 0.5 | 78.02 | 49.58 | 61.53 |
+| object | 白盒插入 | 0.5 | 78.31 | 51.09 | 62.44 |
+| ghost_template | 黑盒插入 | 0.5 | 77.45 | 51.29 | 61.96 |
 
 ### Recall 测试结果
 
