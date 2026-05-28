@@ -478,6 +478,12 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
 | noise | 0.5 | 32.50 | 14.56 | 1.46 |
 | pgd | 0.3 | 18.07 | 12.06 | 3.53 |
 | perturb | 0.5 | 12.38 | 8.12 | 2.97 |
+| saliency_mask | 0.3 | 1.16 | 0.59 | 0.20 |
+| saliency_mask | 0.5 | 12.72 | 10.84 | 7.71 |
+| spawn | 0.5 | 93.72 | 88.22 | 63.70 |
+| scatter | 0.5 | 93.36 | 87.95 | 63.45 |
+| object | 0.5 | 93.89 | 88.50 | 63.73 |
+| ghost_template | 0.5 | 93.39 | 87.92 | 63.00 |
 
 ---
 
