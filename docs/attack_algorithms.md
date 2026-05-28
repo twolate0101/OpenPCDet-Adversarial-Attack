@@ -9,7 +9,8 @@
 
 | 类型 | 攻击方式 | 操作对象 | 需要梯度 | 算法 |
 |------|---------|---------|---------|------|
-| 黑盒删除 | 随机/几何删除点云 | points (N,4) | 否 | `noise` `drop` `geo_drop` |
+| 黑盒扰动 | 点坐标加高斯噪声 | points (N,4) | 否 | `noise` |
+| 黑盒删除 | 随机/几何删除点云 | points (N,4) | 否 | `drop` `geo_drop` |
 | 白盒扰动 | 迭代微调 voxel 坐标 | voxels (M,P,4) | 是 | `pgd` `perturb` |
 | 白盒删除 | 梯度指导移除关键 voxels | voxels + coords | 是 | `saliency_mask` |
 | 白盒插入 | 梯度优化生成对抗点/物体 | voxels | 是 | `spawn` `scatter` `object` |
@@ -465,7 +466,7 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
 ### KITTI 3D AP 测试结果 (AP_R40, Moderate 难度)
 
 > KITTI 评估按 Easy / Moderate / Hard 三个难度等级分别计算 AP，不做平均。
-> 下表记录 Moderate 等级（KITTI 排行榜主指标）。三个数字分别对应 E/M/H。
+> 下表每列为一个类别（Car / Ped / Cyc）的 **Moderate 难度 3D AP_R40**（KITTI 排行榜主指标）。
 
 | 攻击 | 类型 | severity | Car 3D | Ped 3D | Cyc 3D |
 |------|------|----------|--------|--------|--------|
