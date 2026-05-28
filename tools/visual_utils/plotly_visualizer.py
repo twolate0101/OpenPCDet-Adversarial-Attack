@@ -2,6 +2,7 @@
 import plotly.graph_objects as go
 import numpy as np
 import os
+from scipy.spatial import cKDTree
 
 class PlotlyVisualizer:
     """3D 交互式热力图可视化器 (学术白底版 + 防眩晕网格 + 独立车头线)"""
@@ -11,13 +12,46 @@ class PlotlyVisualizer:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         fig = go.Figure()
 
-        # 1. 降采样 (防止 HTML 过大)
-        sample_idx = np.random.choice(len(pts_adv), min(25000, len(pts_adv)), replace=False)
-        pts_c = pts_clean[sample_idx, :3]
-        pts_a = pts_adv[sample_idx, :3]
+        # 1. 降采样 + 扰动计算（处理 clean/adv 点数不一致的情况）
+        #    - 扰动/删除攻击: 点数相等或 adv 更少，按索引对应计算
+        #    - 插入攻击: adv 更多，共同部分按索引对应，注入部分用最近邻距离
+        n_clean, n_adv = len(pts_clean), len(pts_adv)
+        n_common = min(n_clean, n_adv)
+        n_sample = min(25000, n_adv)
 
-        # 2. 计算扰动热力图 (Delta)
-        perturbation_delta = np.linalg.norm(pts_a - pts_c, axis=1)
+        if n_clean == n_adv:
+            # 点数相等：直接按索引对应
+            sample_idx = np.random.choice(n_adv, n_sample, replace=False)
+            pts_c = pts_clean[sample_idx, :3]
+            pts_a = pts_adv[sample_idx, :3]
+            perturbation_delta = np.linalg.norm(pts_a - pts_c, axis=1)
+        else:
+            # 点数不等（插入/删除攻击）
+            sample_common = min(n_sample, n_common)
+            sample_extra = n_sample - sample_common
+
+            idx_common = np.random.choice(n_common, sample_common, replace=False)
+            pts_a_common = pts_adv[idx_common, :3]
+            pts_c_common = pts_clean[idx_common, :3]
+            delta_common = np.linalg.norm(pts_a_common - pts_c_common, axis=1)
+
+            if n_adv > n_common and sample_extra > 0:
+                # 插入攻击：注入点用最近邻距离作为扰动度量
+                idx_extra = np.random.choice(
+                    np.arange(n_common, n_adv), min(sample_extra, n_adv - n_common), replace=False
+                )
+                pts_a_extra = pts_adv[idx_extra, :3]
+                tree = cKDTree(pts_clean[:, :3])
+                delta_extra, _ = tree.query(pts_a_extra, k=1)
+                pts_a = np.vstack([pts_a_common, pts_a_extra])
+                perturbation_delta = np.concatenate([delta_common, delta_extra])
+            elif n_clean > n_common and sample_extra > 0:
+                # 删除攻击：clean 中被删的点不参与可视化
+                pts_a = pts_a_common
+                perturbation_delta = delta_common
+            else:
+                pts_a = pts_a_common
+                perturbation_delta = delta_common
         
         # 🌟 绘制毒化点云 (学术白底专属配置)
         fig.add_trace(go.Scatter3d(

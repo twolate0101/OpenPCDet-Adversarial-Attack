@@ -161,12 +161,13 @@ class GhostTemplateAttacker(BaseAttacker):
           2. 按 severity 计算注入模板数量
           3. 随机选择模板类型（Car/Ped/Cyc）
           4. 找空旷位置，平移模板到该位置
-          5. 拼接模板点云到原始 points
+          5. 拼接模板点云到原始 points（自动匹配特征维度 C）
 
         Args:
             data_dict: 含 data_dict['points'] 的数据字典
-                       格式: numpy (N, 4) [x, y, z, intensity]
-                              或 tensor (N, 4)
+                       格式: numpy (N, C) [x, y, z, intensity, ...]
+                              或 tensor (N, C)
+                       C 由数据集决定（KITTI=4, Waymo/nuscenes>4）
         Returns:
             修改后的 data_dict（points 数量增加）
         """
@@ -175,11 +176,15 @@ class GhostTemplateAttacker(BaseAttacker):
         if not is_numpy:
             points = points.cpu().numpy()
 
+        # severity<=0 按约定表示"不攻击"
+        if self.severity <= 0:
+            return data_dict
+
         # 注入模板数量: severity * 10, 至少 1 个
         n_templates = max(1, int(self.severity * 10))
 
         new_segments = [points]
-        default_intensity = 0.3  # 默认反射率
+        n_features = points.shape[1]  # 兼容不同数据集的特征维度（KITTI=4, Waymo/nuscenes>4）
 
         for _ in range(n_templates):
             # 随机选模板
@@ -191,11 +196,11 @@ class GhostTemplateAttacker(BaseAttacker):
             # 平移模板
             placed = template_pts + position  # (K, 3)
 
-            # 添加默认 intensity 列
-            intensity_col = np.full(
-                (len(placed), 1), default_intensity, dtype=np.float32
-            )
-            placed_full = np.hstack([placed, intensity_col])  # (K, 4)
+            # 构建与输入同维度的点云 (K, C)，xyz 填入，其余特征置 0
+            placed_full = np.zeros((len(placed), n_features), dtype=np.float32)
+            placed_full[:, :3] = placed
+            if n_features >= 4:
+                placed_full[:, 3] = 0.3  # 默认 intensity
 
             new_segments.append(placed_full)
 
