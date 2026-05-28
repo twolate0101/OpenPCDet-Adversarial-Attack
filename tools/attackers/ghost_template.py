@@ -175,6 +175,10 @@ class GhostTemplateAttacker(BaseAttacker):
         if not is_numpy:
             points = points.cpu().numpy()
 
+        # severity<=0 按约定表示"不攻击"
+        if self.severity <= 0:
+            return data_dict
+
         # 注入模板数量: severity * 10, 至少 1 个
         n_templates = max(1, int(self.severity * 10))
 
