@@ -139,8 +139,8 @@ def main():
         for idx, data_dict in enumerate(demo_dataset):
             logger.info(f'Visualized sample index: \t{idx + 1}')
             # 保存干净点云（用于可视化扰动热力图）
-            # 黑盒攻击时 dataset.py 已提前保存 clean_points，否则直接用当前 points
-            clean_points = data_dict.get('clean_points', data_dict['points']).copy()
+            # 黑盒攻击时 dataset._last_clean_points 存有攻击前的原始点云
+            clean_points = getattr(demo_dataset, '_last_clean_points', data_dict['points']).copy()
 
             data_dict = demo_dataset.collate_batch([data_dict])
             load_data_to_gpu(data_dict)

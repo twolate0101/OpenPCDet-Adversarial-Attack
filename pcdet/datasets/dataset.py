@@ -209,8 +209,9 @@ class DatasetTemplate(torch_data.Dataset):
         # 通过外部设置 self._attacker 注入攻击器，黑盒攻击在此处修改点云
         # 注意：此处运行在 DataLoader 子进程中，不能调用 .cuda()
         if hasattr(self, '_attacker') and self._attacker is not None:
-            # 保存攻击前的干净点云，供可视化对比使用
-            data_dict['clean_points'] = data_dict['points'].copy()
+            # 保存攻击前的干净点云，供 demo.py 可视化对比使用
+            # 注意：不存入 data_dict，避免 collate_batch 时各样本点数不同导致 stack 失败
+            self._last_clean_points = data_dict['points'].copy()
             tmp_dict = {'points': data_dict['points']}
             tmp_dict = self._attacker.forward(tmp_dict)
             data_dict['points'] = tmp_dict['points']
