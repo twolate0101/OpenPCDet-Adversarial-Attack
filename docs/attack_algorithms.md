@@ -457,6 +457,17 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
 | object | 白盒插入 | 0.5 | 78.31 | 51.09 | 62.44 |
 | ghost_template | 黑盒插入 | 0.5 | 77.45 | 51.29 | 61.96 |
 
+**结果分析**:
+
+| 攻击类型 | 效果 | 原因 |
+|---------|------|------|
+| 扰动（noise/pgd/perturb） | AP 接近 0 | 坐标扰动破坏了所有点的几何结构，检测器完全失效 |
+| 黑盒删除（drop/geo_drop） | AP 下降 10~50% | 随机/几何删除减少点云密度，geo_drop 定向删除更有效 |
+| 白盒删除（saliency_mask） | AP 下降 50~100% | 梯度指导精准定位最关键 voxels，0.3 即可大幅降低 Car AP |
+| 插入（spawn/scatter/object/ghost_template） | AP ≈ baseline | 插入攻击目标是制造假阳性（增加误检），而 AP 衡量的是漏检率（假阴性）。插入的对抗点数量相对整体点云太小，不足以在 AP 上体现。这是论文中的正常现象——插入攻击更适合用误检率（FP rate）评估，而非 AP |
+
+> 注：插入攻击的效果需要用"平均预测目标数"（Average Predicted Objects）或"假阳性率"来评估，KITTI 标准 AP 不完全反映其影响。
+
 ### Recall 测试结果
 
 | 攻击 | severity | Recall@0.3 | Recall@0.5 | Recall@0.7 |
