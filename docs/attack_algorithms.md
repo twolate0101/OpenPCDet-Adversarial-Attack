@@ -306,9 +306,15 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
 
 **测试命令**:
 ```bash
+# 单帧 demo
 python demo.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
   --ckpt ../ckpts/pointpillar_7728.pth \
   --data_path ../data/kitti/testing/velodyne/000008.bin \
+  --attack spawn --severity 0.5 --iterations 20
+
+# 全量 mAP
+python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
+  --ckpt ../ckpts/pointpillar_7728.pth --batch_size 4 \
   --attack spawn --severity 0.5 --iterations 20
 ```
 
@@ -336,9 +342,15 @@ python demo.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
 
 **测试命令**:
 ```bash
+# 单帧 demo
 python demo.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
   --ckpt ../ckpts/pointpillar_7728.pth \
   --data_path ../data/kitti/testing/velodyne/000008.bin \
+  --attack scatter --severity 0.5 --iterations 20
+
+# 全量 mAP
+python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
+  --ckpt ../ckpts/pointpillar_7728.pth --batch_size 4 \
   --attack scatter --severity 0.5 --iterations 20
 ```
 
@@ -371,9 +383,15 @@ python demo.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
 
 **测试命令**:
 ```bash
+# 单帧 demo
 python demo.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
   --ckpt ../ckpts/pointpillar_7728.pth \
   --data_path ../data/kitti/testing/velodyne/000008.bin \
+  --attack object --severity 0.5 --iterations 20
+
+# 全量 mAP
+python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
+  --ckpt ../ckpts/pointpillar_7728.pth --batch_size 4 \
   --attack object --severity 0.5 --iterations 20
 ```
 
