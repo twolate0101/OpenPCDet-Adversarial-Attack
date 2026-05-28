@@ -419,7 +419,10 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
 
 ## 八、实验结果汇总
 
-### mAP 测试结果 (AP_R40, Moderate)
+### KITTI 3D AP 测试结果 (AP_R40, Moderate 难度)
+
+> KITTI 评估按 Easy / Moderate / Hard 三个难度等级分别计算 AP，不做平均。
+> 下表记录 Moderate 等级（KITTI 排行榜主指标）。三个数字分别对应 E/M/H。
 
 | 攻击 | 类型 | severity | Car 3D | Ped 3D | Cyc 3D |
 |------|------|----------|--------|--------|--------|
