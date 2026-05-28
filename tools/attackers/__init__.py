@@ -12,6 +12,9 @@
     - pgd:     PGD 迭代梯度攻击（投影梯度下降，L2 epsilon 球约束）
     - perturb: C&W 风格体素扰动（Adam + 软正则 λ，论文 Section 4 + Eq. 2）
 
+  WHITEBOX_DELETION（白盒删除攻击）: 基于梯度分析的关键体素移除
+    - saliency_mask: 显著性体素掩码（梯度 Top-K voxels 移除，Robust3DOD 框架扩展）
+
   BLACKBOX_INSERTION（黑盒插入攻击）: 模板复制粘贴
     - ghost_template: 幽灵模板注入（真实目标模板 + 空旷区域放置，物理可实现）
 
@@ -62,8 +65,9 @@ def get_attacker(attack_type, severity, **kwargs):
     """根据攻击类型名称创建对应的攻击器实例。
 
     Args:
-        attack_type: 攻击类型字符串 ('none', 'noise', 'drop', 'spawn',
-                     'pgd', 'perturb', 'scatter', 'object', 'test')
+        attack_type: 攻击类型字符串 ('none', 'noise', 'drop', 'geo_drop',
+                     'pgd', 'perturb', 'saliency_mask', 'spawn',
+                     'scatter', 'object', 'ghost_template', 'test')
         severity: 攻击强度 (0.0 ~ 1.0)
         **kwargs: 传递给攻击器的额外参数（如 model, iterations, lr）
 
@@ -97,6 +101,9 @@ def get_attacker(attack_type, severity, **kwargs):
     elif attack_type == 'object':
         from .object import ObjectAttacker
         return ObjectAttacker(severity, **kwargs)
+    elif attack_type == 'saliency_mask':
+        from .saliency_mask import SaliencyMaskAttacker
+        return SaliencyMaskAttacker(severity, **kwargs)
     elif attack_type == 'ghost_template':
         from .ghost_template import GhostTemplateAttacker
         return GhostTemplateAttacker(severity, **kwargs)
