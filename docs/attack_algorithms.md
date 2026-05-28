@@ -259,10 +259,11 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
   --attack saliency_mask --severity 0.3
 ```
 
-**已有结果** (severity=0.3, 真删除修复后):
-| 类别 | Car 3D AP (Mod) | Ped 3D AP (Mod) | Cyc 3D AP (Mod) |
-|------|----------------|----------------|----------------|
-| saliency_mask 0.3 | 37.06 | 0.004 | 0.015 |
+**已有结果**:
+| severity | Car 3D AP (Mod) | Ped 3D AP (Mod) | Cyc 3D AP (Mod) | Recall@0.3 | Recall@0.5 | Recall@0.7 |
+|----------|----------------|----------------|----------------|-----------|-----------|-----------|
+| 0.3 | 37.06 | 0.004 | 0.015 | 1.16 | 0.59 | 0.20 |
+| 0.5 | 11.89 | 0.00 | 0.00 | 12.72 | 10.84 | 7.71 |
 
 ---
 
@@ -318,6 +319,12 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
   --attack spawn --severity 0.5 --iterations 20
 ```
 
+**已有结果** (severity=0.5):
+| 类别 | Car 3D AP (Mod) | Ped 3D AP (Mod) | Cyc 3D AP (Mod) | Recall@0.3 | Recall@0.5 | Recall@0.7 |
+|------|----------------|----------------|----------------|-----------|-----------|-----------|
+| baseline | 78.40 | 51.43 | 62.92 | 94.11 | 88.71 | 63.90 |
+| spawn 0.5 | 78.32 | 50.55 | 62.12 | 93.72 | 88.22 | 63.70 |
+
 ---
 
 ### 6.2 scatter — 对抗散点放置
@@ -353,6 +360,12 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
   --ckpt ../ckpts/pointpillar_7728.pth --batch_size 4 \
   --attack scatter --severity 0.5 --iterations 20
 ```
+
+**已有结果** (severity=0.5):
+| 类别 | Car 3D AP (Mod) | Ped 3D AP (Mod) | Cyc 3D AP (Mod) | Recall@0.3 | Recall@0.5 | Recall@0.7 |
+|------|----------------|----------------|----------------|-----------|-----------|-----------|
+| baseline | 78.40 | 51.43 | 62.92 | 94.11 | 88.71 | 63.90 |
+| scatter 0.5 | 78.02 | 49.58 | 61.53 | 93.36 | 87.95 | 63.45 |
 
 ---
 
@@ -395,6 +408,12 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
   --attack object --severity 0.5 --iterations 20
 ```
 
+**已有结果** (severity=0.5):
+| 类别 | Car 3D AP (Mod) | Ped 3D AP (Mod) | Cyc 3D AP (Mod) | Recall@0.3 | Recall@0.5 | Recall@0.7 |
+|------|----------------|----------------|----------------|-----------|-----------|-----------|
+| baseline | 78.40 | 51.43 | 62.92 | 94.11 | 88.71 | 63.90 |
+| object 0.5 | 78.31 | 51.09 | 62.44 | 93.89 | 88.50 | 63.73 |
+
 ---
 
 ## 七、黑盒插入攻击
@@ -432,6 +451,12 @@ python test.py --cfg_file cfgs/kitti_models/pointpillar.yaml \
   --ckpt ../ckpts/pointpillar_7728.pth --batch_size 4 \
   --attack ghost_template --severity 0.5
 ```
+
+**已有结果** (severity=0.5):
+| 类别 | Car 3D AP (Mod) | Ped 3D AP (Mod) | Cyc 3D AP (Mod) | Recall@0.3 | Recall@0.5 | Recall@0.7 |
+|------|----------------|----------------|----------------|-----------|-----------|-----------|
+| baseline | 78.40 | 51.43 | 62.92 | 94.11 | 88.71 | 63.90 |
+| ghost_template 0.5 | 77.45 | 51.29 | 61.96 | 93.39 | 87.92 | 63.00 |
 
 ---
 
