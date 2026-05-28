@@ -88,7 +88,11 @@ class SaliencyMaskAttacker(BaseAttacker):
         voxels = data_dict['voxels']
         num_voxels = voxels.shape[0]
 
-        # 移除数量（最多移除 90%，保证至少保留部分 voxels）
+        # severity<=0 按约定表示"不攻击"；num_voxels<=1 时无法安全移除
+        if self.severity <= 0 or num_voxels <= 1:
+            return data_dict
+
+        # 移除数量（保证至少移除 1 个，且至少保留 1 个 voxel）
         k = min(max(1, int(num_voxels * self.severity)), num_voxels - 1)
 
         # 克隆并开启梯度
